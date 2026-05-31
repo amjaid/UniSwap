@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "891739966810",
+    "project_id": "uniswap-utm-38aea",
+    "storage_bucket": "uniswap-utm-38aea.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:891739966810:android:d223074cdeaf1127fa7763",
+        "android_client_info": {
+          "package_name": "com.uniswap.uniswap"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDn8pCAar1elOgWwufTvGj9nx_zj8g0zSQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
