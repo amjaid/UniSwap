@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:uniswap/viewmodels/create_listing_viewmodel.dart';
 
 class CreateListingScreen extends ConsumerWidget {
@@ -9,6 +10,23 @@ class CreateListingScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(createListingViewModelProvider);
     final viewModel = ref.read(createListingViewModelProvider.notifier);
+
+    ref.listen<CreateListingState>(createListingViewModelProvider, (previous, next) {
+      if (next.errorMessage != null && next.errorMessage != previous?.errorMessage) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(next.errorMessage!)),
+        );
+        viewModel.clearStatus();
+      }
+
+      if (next.isSuccess && !(previous?.isSuccess ?? false)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Listing published.')),
+        );
+        viewModel.clearStatus();
+        context.go('/home');
+      }
+    });
 
     return Scaffold(
       appBar: AppBar(title: const Text('Create listing')),
@@ -77,8 +95,14 @@ class CreateListingScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
           ElevatedButton(
-            onPressed: state.isSubmitting ? null : () {},
-            child: const Text('Publish listing'),
+            onPressed: state.isSubmitting ? null : viewModel.submit,
+            child: state.isSubmitting
+                ? const SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Publish listing'),
           ),
         ],
       ),

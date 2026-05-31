@@ -58,4 +58,4 @@ Campus options are Johor and UTM KL.
 - Sprint 1: Complete (auth screens + providers + email verification)
 - Flutter analyze: clean
 - VS Code tasks: optional (skipped)
-- Sprint 2: In progress (home, explore, create listing, listing detail)
+- Sprint 2: Complete (home, explore, create listing, listing detail, profile)

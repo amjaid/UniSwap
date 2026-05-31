@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uniswap/viewmodels/home_viewmodel.dart';
 
-class ListingDetailScreen extends StatelessWidget {
+class ListingDetailScreen extends ConsumerWidget {
   const ListingDetailScreen({super.key, required this.listingId});
 
   final String listingId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final repository = ref.read(listingRepositoryProvider);
+    final listing = repository.getById(listingId);
+
     return Scaffold(
       appBar: AppBar(),
       body: ListView(
@@ -15,22 +20,22 @@ class ListingDetailScreen extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
             child: Image.network(
-              'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f',
+              listing?.imageUrl ?? 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f',
               height: 220,
               width: double.infinity,
               fit: BoxFit.cover,
             ),
           ),
           const SizedBox(height: 16),
-          Text('Calculus Textbook', style: Theme.of(context).textTheme.headlineSmall),
+          Text(listing?.title ?? 'Listing', style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 6),
-          Text('RM 45', style: Theme.of(context).textTheme.titleMedium),
+          Text(listing?.price ?? 'RM --', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
-            children: const [
-              Chip(label: Text('Good')),
-              Chip(label: Text('Textbook')),
+            children: [
+              Chip(label: Text(listing?.condition ?? 'Good')),
+              Chip(label: Text(listing?.category ?? 'General')),
             ],
           ),
           const SizedBox(height: 16),
@@ -39,7 +44,7 @@ class ListingDetailScreen extends StatelessWidget {
             leading: const CircleAvatar(
               backgroundImage: NetworkImage('https://images.unsplash.com/photo-1500648767791-00dcc994a43e'),
             ),
-            title: const Text('Siti Aisyah'),
+            title: Text(listing?.sellerName ?? 'Seller'),
             subtitle: const Text('UTM Johor'),
             trailing: ElevatedButton(
               onPressed: () {},
@@ -48,7 +53,8 @@ class ListingDetailScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'Includes notes and highlights. Pickup at UTM library or COD nearby campus.',
+            listing?.description ??
+                'Includes notes and highlights. Pickup at UTM library or COD nearby campus.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 20),

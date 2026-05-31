@@ -4,7 +4,7 @@ A Flutter marketplace app for UTM students. Built with MVVM + Riverpod, go_route
 
 ## Status
 - Sprint 1: Complete (auth + email verification + wireframe-aligned UI)
-- Sprint 2: In progress (home, explore, listing creation)
+- Sprint 2: Complete (home, explore, listing creation, listing detail, profile)
 - Dependencies installed and analyzer clean
 - VS Code tasks: skipped (optional)
 - Sprint 1 UI: sign-in/sign-up updated to match wireframes
@@ -21,6 +21,11 @@ A Flutter marketplace app for UTM students. Built with MVVM + Riverpod, go_route
 4. Fetch dependencies: `flutter pub get`.
 5. Android: install SDK platforms 33 and 36 in Android Studio SDK Manager.
 6. Firebase Auth: enable Email/Password provider in the Firebase console.
+
+## Run
+- Start the web app in Chrome: `flutter run -d chrome`
+- Hot restart while running: press `R` in the Flutter run terminal
+- Hot reload while running: press `r` in the Flutter run terminal
 
 ## Design References
 - Figma wireframes (PNG) live in assets/wireframes and are used for layout reference only.

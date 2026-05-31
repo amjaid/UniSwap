@@ -12,6 +12,7 @@ class SignUpScreen extends ConsumerStatefulWidget {
 
 class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   final _fullNameController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -19,6 +20,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   @override
   void dispose() {
     _fullNameController.dispose();
+    _usernameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
@@ -65,6 +67,17 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                   prefixIcon: Icon(Icons.person_outline),
                 ),
                 onChanged: viewModel.updateFullName,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _usernameController,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'Username',
+                  prefixIcon: Icon(Icons.alternate_email),
+                  helperText: '3-20 characters, letters, numbers, or _.',
+                ),
+                onChanged: viewModel.updateUsername,
               ),
               const SizedBox(height: 16),
               TextField(

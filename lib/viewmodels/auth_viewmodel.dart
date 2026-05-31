@@ -35,6 +35,10 @@ final authStateProvider = StreamProvider<User?>((ref) {
   return ref.read(firebaseAuthProvider).authStateChanges();
 });
 
+final userProfileProvider = FutureProvider.family<Map<String, dynamic>?, String>((ref, userId) async {
+  return ref.read(firestoreServiceProvider).fetchUserProfile(userId: userId);
+});
+
 final signInViewModelProvider = StateNotifierProvider<SignInViewModel, SignInState>((ref) {
   return SignInViewModel(ref.read(authServiceProvider));
 });
@@ -150,6 +154,7 @@ class SignInViewModel extends StateNotifier<SignInState> {
 class SignUpState extends Equatable {
   const SignUpState({
     required this.fullName,
+    required this.username,
     required this.email,
     required this.password,
     required this.phone,
@@ -164,6 +169,7 @@ class SignUpState extends Equatable {
   });
 
   final String fullName;
+  final String username;
   final String email;
   final String password;
   final String phone;
@@ -179,6 +185,7 @@ class SignUpState extends Equatable {
   factory SignUpState.initial() {
     return const SignUpState(
       fullName: '',
+      username: '',
       email: '',
       password: '',
       phone: '',
@@ -205,6 +212,7 @@ class SignUpState extends Equatable {
 
   SignUpState copyWith({
     String? fullName,
+    String? username,
     String? email,
     String? password,
     String? phone,
@@ -219,6 +227,7 @@ class SignUpState extends Equatable {
   }) {
     return SignUpState(
       fullName: fullName ?? this.fullName,
+      username: username ?? this.username,
       email: email ?? this.email,
       password: password ?? this.password,
       phone: phone ?? this.phone,
@@ -236,6 +245,7 @@ class SignUpState extends Equatable {
   @override
   List<Object?> get props => [
         fullName,
+      username,
         email,
         password,
         phone,
@@ -272,6 +282,8 @@ class SignUpViewModel extends StateNotifier<SignUpState> {
 
   void updateFullName(String fullName) => state = state.copyWith(fullName: fullName, errorMessage: null);
 
+  void updateUsername(String username) => state = state.copyWith(username: username, errorMessage: null);
+
   void updateEmail(String email) => state = state.copyWith(email: email, errorMessage: null);
 
   void updatePassword(String password) => state = state.copyWith(password: password, errorMessage: null);
@@ -290,12 +302,19 @@ class SignUpViewModel extends StateNotifier<SignUpState> {
     final email = state.email.trim();
     final password = state.password.trim();
     final fullName = state.fullName.trim();
+    final username = state.username.trim();
+    final normalizedUsername = username.toLowerCase();
     final phone = state.phone.trim();
     final faculty = state.faculty.trim();
     final campus = state.campus.trim();
 
-    if (fullName.isEmpty || phone.isEmpty || faculty.isEmpty) {
+    if (fullName.isEmpty || username.isEmpty || phone.isEmpty || faculty.isEmpty) {
       state = state.copyWith(errorMessage: 'Please complete all fields.');
+      return;
+    }
+
+    if (!_isValidUsername(username)) {
+      state = state.copyWith(errorMessage: 'Username must be 3-20 characters, letters, numbers, or _.');
       return;
     }
 
@@ -312,11 +331,18 @@ class SignUpViewModel extends StateNotifier<SignUpState> {
     state = state.copyWith(isLoading: true, errorMessage: null);
 
     try {
+      final isAvailable = await _firestoreService.isUsernameAvailable(normalizedUsername);
+      if (!isAvailable) {
+        state = state.copyWith(isLoading: false, errorMessage: 'That username is already taken.');
+        return;
+      }
       final credential = await _authService.signUp(email: email, password: password);
+      await _authService.updateDisplayName(displayName: normalizedUsername);
       await credential.user?.sendEmailVerification();
       await _firestoreService.createUserProfile(
         userId: credential.user!.uid,
         fullName: fullName,
+        username: normalizedUsername,
         email: email,
         phone: phone,
         faculty: faculty,
@@ -402,6 +428,11 @@ class ForgotPasswordViewModel extends StateNotifier<ForgotPasswordState> {
 
 bool _isUtmEmail(String email) {
   return email.toLowerCase().contains('utm.my');
+}
+
+bool _isValidUsername(String username) {
+  final trimmed = username.trim();
+  return RegExp(r'^[a-zA-Z0-9_]{3,20}$').hasMatch(trimmed);
 }
 
 String _authErrorMessage(FirebaseAuthException error) {

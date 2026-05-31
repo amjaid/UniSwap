@@ -26,4 +26,11 @@ class AuthService {
   Future<void> signOut() {
     return _auth.signOut();
   }
+
+  Future<void> updateDisplayName({required String displayName}) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    await user.updateDisplayName(displayName);
+    await user.reload();
+  }
 }
