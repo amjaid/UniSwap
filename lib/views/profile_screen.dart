@@ -517,7 +517,7 @@ class _ProfileListingsGrid extends StatelessWidget {
       crossAxisCount: 2,
       crossAxisSpacing: 12,
       mainAxisSpacing: 12,
-      childAspectRatio: 0.78,
+      childAspectRatio: 0.68,
       padding: const EdgeInsets.only(top: 12),
       children: const [
         _MiniListingCard(title: 'Calculus Textbook', price: 'RM 45', tag: 'Good'),
@@ -557,15 +557,25 @@ class _MiniListingCard extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(8),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 4),
-                Text(price, style: const TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 4),
-                Chip(label: Text(tag, style: const TextStyle(fontSize: 11))),
+                const SizedBox(height: 2),
+                Text(
+                  price,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 2),
+                Chip(
+                  label: Text(tag, style: const TextStyle(fontSize: 10)),
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
               ],
             ),
           ),

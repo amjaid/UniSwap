@@ -100,7 +100,7 @@ class HomeScreen extends ConsumerWidget {
                 crossAxisCount: 2,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                childAspectRatio: 0.78,
+                childAspectRatio: 0.68,
               ),
               itemBuilder: (context, index) {
                 final listing = state.nearbyListings.isEmpty ? null : state.nearbyListings[index];
@@ -242,13 +242,26 @@ class _ListingGridCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.all(10),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(listing!.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(
+                    listing!.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    listing!.price,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
                   const SizedBox(height: 4),
-                  Text(listing!.price, style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  _ConditionChip(label: listing!.condition),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: _ConditionChip(label: listing!.condition),
+                  ),
                 ],
               ),
             ),

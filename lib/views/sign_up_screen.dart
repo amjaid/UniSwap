@@ -165,15 +165,18 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                     : const Text('Create account'),
               ),
               const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('Already have an account?'),
-                  TextButton(
-                    onPressed: () => context.go('/sign-in'),
-                    child: const Text('Sign in'),
-                  ),
-                ],
+              Center(
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  children: [
+                    const Text('Already have an account?'),
+                    TextButton(
+                      onPressed: () => context.go('/sign-in'),
+                      child: const Text('Sign in'),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
