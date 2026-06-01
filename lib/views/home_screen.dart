@@ -25,6 +25,7 @@ class HomeScreen extends ConsumerWidget {
 
     return Scaffold(
       floatingActionButton: FloatingActionButton(
+        heroTag: 'home_fab',
         onPressed: () => context.go('/create-listing'),
         backgroundColor: AppColors.primary,
         child: const Icon(Icons.add, color: Colors.white),
@@ -198,7 +199,14 @@ class _ListingCard extends StatelessWidget {
                     children: [
                       _ConditionChip(label: listing!.condition),
                       const SizedBox(width: 6),
-                      Text(listing!.sellerName, style: Theme.of(context).textTheme.bodySmall),
+                      Expanded(
+                        child: Text(
+                          listing!.sellerName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
                     ],
                   ),
                 ],

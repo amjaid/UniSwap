@@ -167,7 +167,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ],
                 ),
                 const SizedBox(
-                  height: 240,
+                  height: 260,
                   child: TabBarView(
                     children: [
                       _ProfileListingsGrid(),
@@ -517,7 +517,7 @@ class _ProfileListingsGrid extends StatelessWidget {
       crossAxisCount: 2,
       crossAxisSpacing: 12,
       mainAxisSpacing: 12,
-      childAspectRatio: 0.68,
+      childAspectRatio: 0.6,
       padding: const EdgeInsets.only(top: 12),
       children: const [
         _MiniListingCard(title: 'Calculus Textbook', price: 'RM 45', tag: 'Good'),
@@ -557,7 +557,7 @@ class _MiniListingCard extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(6),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -571,10 +571,16 @@ class _MiniListingCard extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 2),
-                Chip(
-                  label: Text(tag, style: const TextStyle(fontSize: 10)),
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Chip(
+                      label: Text(tag, style: const TextStyle(fontSize: 10)),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
                 ),
               ],
             ),

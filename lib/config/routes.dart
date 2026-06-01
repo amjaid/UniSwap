@@ -6,15 +6,19 @@ import 'package:uniswap/viewmodels/auth_viewmodel.dart';
 import 'package:uniswap/views/main_shell_screen.dart';
 import 'package:uniswap/views/forgot_password_screen.dart';
 import 'package:uniswap/views/placeholder_screens.dart';
+import 'package:uniswap/views/inbox_screen.dart';
+import 'package:uniswap/views/chat_screen.dart';
 import 'package:uniswap/views/home_screen.dart';
 import 'package:uniswap/views/explore_screen.dart';
 import 'package:uniswap/views/create_listing_screen.dart';
 import 'package:uniswap/views/listing_detail_screen.dart';
 import 'package:uniswap/views/profile_screen.dart';
+import 'package:uniswap/views/swap_detail_screen.dart';
+import 'package:uniswap/views/swap_hub_screen.dart';
 import 'package:uniswap/views/sign_in_screen.dart';
 import 'package:uniswap/views/sign_up_screen.dart';
 
-final _shellNavigatorKey = GlobalKey<NavigatorState>();
+final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 final goRouterRefreshProvider = Provider<GoRouterRefreshNotifier>((ref) {
   final notifier = GoRouterRefreshNotifier(ref);
@@ -26,6 +30,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
 
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/',
     refreshListenable: ref.watch(goRouterRefreshProvider),
     redirect: (context, state) {
@@ -65,7 +70,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ForgotPasswordScreen(),
       ),
       ShellRoute(
-        navigatorKey: _shellNavigatorKey,
         builder: (context, state, child) => MainShellScreen(child: child),
         routes: [
           GoRoute(

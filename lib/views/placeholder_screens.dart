@@ -47,56 +47,6 @@ class SplashScreen extends StatelessWidget {
 }
 
 
-class SwapHubScreen extends StatelessWidget {
-  const SwapHubScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: Text('Swap Hub')),
-    );
-  }
-}
-
-class SwapDetailScreen extends StatelessWidget {
-  const SwapDetailScreen({super.key, required this.swapId});
-
-  final String swapId;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Swap detail')),
-      body: Center(child: Text('Swap $swapId')),
-    );
-  }
-}
-
-class InboxScreen extends StatelessWidget {
-  const InboxScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: Text('Inbox')),
-    );
-  }
-}
-
-class ChatScreen extends StatelessWidget {
-  const ChatScreen({super.key, required this.swapId});
-
-  final String swapId;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Chat')),
-      body: Center(child: Text('Chat for $swapId')),
-    );
-  }
-}
-
 class PublicProfileScreen extends StatelessWidget {
   const PublicProfileScreen({super.key, required this.userId});
 

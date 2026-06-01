@@ -1,18 +1,19 @@
 # UniSwap
 
-A Flutter marketplace app for UTM students. Built with MVVM + Riverpod, go_router navigation, and Firebase.
+UniSwap is a Flutter marketplace app for UTM students. Built with MVVM + Riverpod, go_router navigation, and Firebase Auth/Firestore/Storage/Messaging.
 
 ## Status
 - Sprint 1: Complete (auth + email verification + wireframe-aligned UI)
 - Sprint 2: Complete (home, explore, listing creation, listing detail, profile)
-- Dependencies installed and analyzer clean
-- VS Code tasks: skipped (optional)
-- Sprint 1 UI: sign-in/sign-up updated to match wireframes
-- Firebase setup: flutterfire configured (lib/firebase_options.dart)
-- Android: compileSdk set to 36; SDK 33/36 required for build
-- Forgot password + splash screen styled; faculty list loads from Firestore when available
-- Campus options: Johor, UTM KL; faculty fallback list includes MJIIT and other faculties
-- Profile page: stats, tabs, saved/report actions, logout
+- Sprint 3: In progress (swap hub, swap detail, inbox + chat, unread, typing/presence, notifications)
+
+## Features
+- Auth: sign-in, sign-up, email verification, forgot password
+- Listings: home + explore, listing detail, create listing
+- Profile: username, editable username, profile photo, stats
+- Swap Hub: timeline tracking and status actions
+- Inbox + Chat: real-time Firestore listeners, unread counts, typing/presence
+- Notifications: FCM + local notifications (docs/push-notifications.md)
 
 ## Setup
 1. Install Flutter 3.19.0 (Dart 3.3.0) and run `flutter doctor`.
@@ -26,6 +27,14 @@ A Flutter marketplace app for UTM students. Built with MVVM + Riverpod, go_route
 - Start the web app in Chrome: `flutter run -d chrome`
 - Hot restart while running: press `R` in the Flutter run terminal
 - Hot reload while running: press `r` in the Flutter run terminal
+
+## Test Accounts
+- Buyer: <email> / <password>
+- Seller: <email> / <password>
+
+## Firebase Notes
+- Storage CORS fix for web uploads: see docs/storage-cors-fix.md
+- Firestore collections used: users, conversations, conversations/{id}/messages
 
 ## Design References
 - Figma wireframes (PNG) live in assets/wireframes and are used for layout reference only.
