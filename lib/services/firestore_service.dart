@@ -80,10 +80,9 @@ class FirestoreService {
     return _firestore
         .collection('conversations')
         .where('participants', arrayContains: userId)
-        .orderBy('last_timestamp', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) {
+      final threads = snapshot.docs.map((doc) {
         final data = doc.data();
         final unreadCounts = (data['unread_counts'] as Map?)?.map(
               (key, value) => MapEntry(key.toString(), (value as num?)?.toInt() ?? 0),
@@ -102,6 +101,9 @@ class FirestoreService {
           role: threadCategoryFromString(data['role'] as String?),
         );
       }).toList();
+
+      threads.sort((a, b) => b.lastTimestamp.compareTo(a.lastTimestamp));
+      return threads;
     });
   }
 

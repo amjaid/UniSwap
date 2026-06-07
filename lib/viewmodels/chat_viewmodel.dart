@@ -14,7 +14,6 @@ final chatViewModelProvider =
     conversationId,
     user?.uid,
   );
-  ref.onDispose(viewModel.dispose);
   return viewModel;
 });
 

@@ -9,7 +9,6 @@ import 'package:uniswap/viewmodels/auth_viewmodel.dart';
 final inboxViewModelProvider = StateNotifierProvider<InboxViewModel, InboxState>((ref) {
   final user = ref.watch(authStateProvider).valueOrNull;
   final viewModel = InboxViewModel(ref.read(firestoreServiceProvider), user?.uid);
-  ref.onDispose(viewModel.dispose);
   return viewModel;
 });
 

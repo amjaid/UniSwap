@@ -40,10 +40,12 @@ class InboxScreen extends ConsumerWidget {
         ),
         body: state.isLoading
             ? const Center(child: CircularProgressIndicator())
-            : _InboxList(
-                threads: viewModel.filteredThreads(),
-                onTap: (thread) => context.go('/chat/${thread.id}'),
-              ),
+            : state.errorMessage != null
+                ? Center(child: Text(state.errorMessage!))
+                : _InboxList(
+                    threads: viewModel.filteredThreads(),
+                    onTap: (thread) => context.go('/chat/${thread.id}'),
+                  ),
       ),
     );
   }
