@@ -20,6 +20,11 @@ class TransactionService {
     );
   }
 
+  /// Fetch a single transaction by ID.
+  Future<ApiResponse> fetchTransaction(int transactionId) async {
+    return _apiClient.get('/transactions/$transactionId/');
+  }
+
   /// Create a new transaction (buyer expresses intent to purchase).
   Future<ApiResponse> createTransaction(int itemId) async {
     return _apiClient.post('/transactions/', body: {'item': itemId});
@@ -54,5 +59,21 @@ class TransactionService {
     if (transactionId != null) body['transaction'] = transactionId;
 
     return _apiClient.post('/reviews/', body: body);
+  }
+
+  /// Fetch reviews for a specific user.
+  Future<ApiResponse> fetchReviews(int userId, {int page = 1}) async {
+    return _apiClient.get(
+      '/reviews/',
+      queryParams: {
+        'reviewee': userId.toString(),
+        'page': page.toString(),
+      },
+    );
+  }
+
+  /// Fetch average rating for a user.
+  Future<ApiResponse> fetchUserRating(int userId) async {
+    return _apiClient.get('/users/$userId/ratings/');
   }
 }

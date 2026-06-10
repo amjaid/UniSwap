@@ -47,12 +47,12 @@ class BaseAPITestCase(TestCase):
             university_domain='university.edu',
         )
 
-        # Create categories
-        cls.category = Category.objects.create(
-            name='Textbooks', slug='textbooks'
+        # Create categories (use get_or_create in case data migration already seeded them)
+        cls.category, _ = Category.objects.get_or_create(
+            name='Textbooks', defaults={'slug': 'textbooks'}
         )
-        cls.category2 = Category.objects.create(
-            name='Electronics', slug='electronics'
+        cls.category2, _ = Category.objects.get_or_create(
+            name='Electronics', defaults={'slug': 'electronics'}
         )
 
         # Create items

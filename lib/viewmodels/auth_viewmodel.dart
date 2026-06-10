@@ -3,25 +3,64 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uniswap/services/django_auth_service.dart';
 import 'package:uniswap/services/providers.dart';
 
-/// Auth state provider - emits the current user data or null.
-/// Uses Django JWT token to check authentication status.
-final authStateProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
-  final authService = ref.read(djangoAuthServiceProvider);
-  final isAuth = await authService.isAuthenticated();
-  if (isAuth) {
-    return authService.currentUser;
-  }
+/// Auth state provider — emits the current user data or null.
+///
+/// Unlike a FutureProvider (which re-evaluates on every dependency change),
+/// this is a StateProvider that only fetches from the API:
+/// 1. On first access (app startup)
+/// 2. After explicit login (via SignInViewModel)
+/// 3. After explicit registration (via SignUpViewModel)
+/// 4. After profile update (via DjangoAuthService.updateProfile)
+/// 5. After logout
+///
+/// This prevents excessive GET /api/users/me/ calls that cause rate limiting.
+final authStateProvider = StateProvider<Map<String, dynamic>?>((ref) {
+  // Initial value is null — the AuthGuard in routes.dart will trigger
+  // a one-time fetch via ref.read(authServiceProvider).fetchCurrentUser()
+  // on app startup.
   return null;
 });
 
+/// Initialize auth state by checking stored tokens and fetching user profile.
+///
+/// Call this once on app startup (e.g., in main.dart or a splash screen).
+/// Returns the current user data, or null if not authenticated.
+Future<Map<String, dynamic>?> initializeAuthState(Ref ref) async {
+  final authService = ref.read(djangoAuthServiceProvider);
+  final isAuth = await authService.isAuthenticated();
+  if (isAuth) {
+    final user = authService.currentUser;
+    ref.read(authStateProvider.notifier).state = user;
+    return user;
+  }
+  ref.read(authStateProvider.notifier).state = null;
+  return null;
+}
+
+/// Refresh auth state by re-fetching the current user profile.
+///
+/// Call this after login, registration, or profile updates.
+Future<void> refreshAuthState(Ref ref) async {
+  final authService = ref.read(djangoAuthServiceProvider);
+  final response = await authService.fetchCurrentUser();
+  if (response.isSuccess && response.data != null) {
+    ref.read(authStateProvider.notifier).state = response.data;
+  }
+}
+
+/// Clear auth state (on logout or token expiry).
+void clearAuthState(Ref ref) {
+  ref.read(authStateProvider.notifier).state = null;
+}
+
 final signInViewModelProvider =
     StateNotifierProvider<SignInViewModel, SignInState>((ref) {
-  return SignInViewModel(ref.read(djangoAuthServiceProvider));
+  return SignInViewModel(ref.read(djangoAuthServiceProvider), ref);
 });
 
 final signUpViewModelProvider =
     StateNotifierProvider<SignUpViewModel, SignUpState>((ref) {
-  return SignUpViewModel(ref.read(djangoAuthServiceProvider));
+  return SignUpViewModel(ref.read(djangoAuthServiceProvider), ref);
 });
 
 final forgotPasswordViewModelProvider =
@@ -80,9 +119,10 @@ class SignInState extends Equatable {
 }
 
 class SignInViewModel extends StateNotifier<SignInState> {
-  SignInViewModel(this._authService) : super(SignInState.initial());
+  SignInViewModel(this._authService, this._ref) : super(SignInState.initial());
 
   final DjangoAuthService _authService;
+  final Ref _ref;
 
   void updateEmail(String email) =>
       state = state.copyWith(email: email, errorMessage: null);
@@ -117,6 +157,8 @@ class SignInViewModel extends StateNotifier<SignInState> {
         password: password,
       );
       if (response.isSuccess) {
+        // Refresh auth state with the newly fetched user profile
+        await refreshAuthState(_ref);
         state = state.copyWith(isLoading: false);
       } else {
         state = state.copyWith(
@@ -247,9 +289,10 @@ class SignUpState extends Equatable {
 }
 
 class SignUpViewModel extends StateNotifier<SignUpState> {
-  SignUpViewModel(this._authService) : super(SignUpState.initial());
+  SignUpViewModel(this._authService, this._ref) : super(SignUpState.initial());
 
   final DjangoAuthService _authService;
+  final Ref _ref;
 
   void updateFullName(String fullName) =>
       state = state.copyWith(fullName: fullName, errorMessage: null);
@@ -319,6 +362,8 @@ class SignUpViewModel extends StateNotifier<SignUpState> {
       );
 
       if (response.isSuccess) {
+        // Refresh auth state with the newly registered user
+        await refreshAuthState(_ref);
         state = state.copyWith(isLoading: false, isSuccess: true);
       } else {
         state = state.copyWith(

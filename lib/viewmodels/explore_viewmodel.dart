@@ -2,7 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uniswap/models/listing.dart';
 import 'package:uniswap/repositories/listing_repository.dart';
-import 'package:uniswap/viewmodels/home_viewmodel.dart';
+import 'package:uniswap/services/providers.dart';
 
 final exploreViewModelProvider = StateNotifierProvider<ExploreViewModel, ExploreState>((ref) {
   return ExploreViewModel(ref.read(listingRepositoryProvider));
@@ -89,6 +89,7 @@ class ExploreViewModel extends StateNotifier<ExploreState> {
 
   Future<void> refresh() async {
     state = state.copyWith(isLoading: true);
+    await _repository.refresh();
     await _load();
   }
 

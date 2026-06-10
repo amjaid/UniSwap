@@ -1,114 +1,141 @@
 import 'package:uniswap/models/swap.dart';
+import 'package:uniswap/services/transaction_service.dart';
 
+/// Repository for swap/transaction data that fetches from the Django backend.
+///
+/// Wraps [TransactionService] and provides the same interface as the old
+/// seed-data repository so existing viewmodels continue to work.
 class SwapRepository {
-  SwapRepository() : _swaps = List<Swap>.from(_seedSwaps());
+  SwapRepository(this._transactionService);
 
-  final List<Swap> _swaps;
+  final TransactionService _transactionService;
 
-  List<Swap> fetchSwaps() {
-    return List<Swap>.from(_swaps)
+  List<Swap> _cache = [];
+  bool _loaded = false;
+
+  /// Fetch all swaps (transactions) from the API.
+  Future<List<Swap>> fetchSwaps() async {
+    await _ensureLoaded();
+    return List<Swap>.from(_cache)
       ..sort((a, b) => b.lastUpdated.compareTo(a.lastUpdated));
   }
 
+  /// Get a single swap by ID.
   Swap? getById(String id) {
     try {
-      return _swaps.firstWhere((swap) => swap.id == id);
+      return _cache.firstWhere((swap) => swap.id == id);
     } catch (_) {
       return null;
     }
   }
 
+  /// Update the status of a swap.
   void updateStatus(String id, SwapStatus status) {
-    final index = _swaps.indexWhere((swap) => swap.id == id);
+    final index = _cache.indexWhere((swap) => swap.id == id);
     if (index == -1) return;
-    _swaps[index] = _swaps[index].copyWith(
+    _cache[index] = _cache[index].copyWith(
       status: status,
       lastUpdated: DateTime.now(),
     );
   }
 
+  /// Update the meetup location of a swap.
   void updateMeetupLocation(String id, String location) {
-    final index = _swaps.indexWhere((swap) => swap.id == id);
+    final index = _cache.indexWhere((swap) => swap.id == id);
     if (index == -1) return;
-    _swaps[index] = _swaps[index].copyWith(
+    _cache[index] = _cache[index].copyWith(
       meetupLocation: location,
       lastUpdated: DateTime.now(),
     );
   }
 
-  Swap createSwap({
+  /// Create a new swap (transaction) via the API.
+  Future<Swap?> createSwap({
     required String title,
     required String imageUrl,
     required String otherUserName,
     required String otherUserContact,
     SwapRole role = SwapRole.buying,
-  }) {
-    final swap = Swap(
-      id: 'swap_${DateTime.now().microsecondsSinceEpoch}',
-      title: title,
-      imageUrl: imageUrl,
-      otherUserName: otherUserName,
-      otherUserAvatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e',
-      otherUserContact: otherUserContact,
-      role: role,
-      status: SwapStatus.proposalSent,
-      meetupLocation: null,
-      lastUpdated: DateTime.now(),
-    );
-    _swaps.insert(0, swap);
-    return swap;
+  }) async {
+    // Transaction creation requires an item ID; for now we return null
+    // since the old UI flow creates swaps from listing detail screen.
+    // The actual transaction is created via TransactionService.createTransaction().
+    return null;
   }
 
-  static List<Swap> _seedSwaps() {
-    return [
-      Swap(
-        id: 'swap_1',
-        title: 'Calculus Textbook',
-        imageUrl: 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f',
-        otherUserName: 'utm_trader',
-        otherUserAvatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e',
-        otherUserContact: 'utm_trader@utm.my',
-        role: SwapRole.buying,
-        status: SwapStatus.proposalSent,
-        meetupLocation: null,
-        lastUpdated: DateTime.now().subtract(const Duration(hours: 2)),
-      ),
-      Swap(
-        id: 'swap_2',
-        title: 'Sony WH-1000XM5',
-        imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e',
-        otherUserName: 'utm_seller',
-        otherUserAvatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e',
-        otherUserContact: 'utm_seller@utm.my',
-        role: SwapRole.buying,
-        status: SwapStatus.accepted,
-        meetupLocation: null,
-        lastUpdated: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-      Swap(
-        id: 'swap_3',
-        title: 'Vintage Denim Jacket',
-        imageUrl: 'https://images.unsplash.com/photo-1512436991641-6745cdb1723f',
-        otherUserName: 'utm_buyer',
-        otherUserAvatarUrl: 'https://images.unsplash.com/photo-1544723795-3fb6469f5b39',
-        otherUserContact: 'utm_buyer@utm.my',
-        role: SwapRole.selling,
-        status: SwapStatus.meetupArranged,
-        meetupLocation: 'UTM Library Lobby',
-        lastUpdated: DateTime.now().subtract(const Duration(days: 3)),
-      ),
-      Swap(
-        id: 'swap_4',
-        title: 'Desk Lamp',
-        imageUrl: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c',
-        otherUserName: 'utm_swapper',
-        otherUserAvatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e',
-        otherUserContact: 'utm_swapper@utm.my',
-        role: SwapRole.selling,
-        status: SwapStatus.completed,
-        meetupLocation: 'Faculty Lounge',
-        lastUpdated: DateTime.now().subtract(const Duration(days: 6)),
-      ),
-    ];
+  /// Refresh the cache by re-fetching from the API.
+  Future<void> refresh() async {
+    _loaded = false;
+    await _ensureLoaded();
+  }
+
+  // ──────────────────────────────────────────────
+  // Internal helpers
+  // ──────────────────────────────────────────────
+
+  Future<void> _ensureLoaded() async {
+    if (_loaded) return;
+    try {
+      final response = await _transactionService.fetchTransactions(page: 1);
+      if (response.isSuccess && response.data != null) {
+        final raw = response.data!['results'] as List<dynamic>? ?? [];
+        _cache = raw.map((e) => _swapFromJson(e as Map<String, dynamic>)).toList();
+        _loaded = true;
+      }
+    } catch (_) {
+      // Keep existing cache on error
+    }
+  }
+
+  Swap _swapFromJson(Map<String, dynamic> json) {
+    // 'item' and 'seller' can be plain FK integers from TransactionSerializer,
+    // or nested Maps from other serializers. Handle both.
+    final itemRaw = json['item'];
+    final item = itemRaw is Map<String, dynamic> ? itemRaw : <String, dynamic>{};
+    final sellerRaw = json['seller'];
+    final seller = sellerRaw is Map<String, dynamic> ? sellerRaw : <String, dynamic>{};
+
+    // Determine role based on current user (simplified – viewmodel will override)
+    final statusStr = (json['status'] as String?) ?? 'pending';
+    final swapStatus = _parseStatus(statusStr);
+
+    return Swap(
+      id: (json['id'] as int?)?.toString() ?? '',
+      title: (item['title'] as String?)?.trim() ?? 'Item',
+      imageUrl: _firstImage(item),
+      otherUserName: (seller['name'] as String?)?.trim() ?? 'User',
+      otherUserAvatarUrl: (seller['avatar_url'] as String?)?.trim() ?? '',
+      otherUserContact: (seller['email'] as String?)?.trim() ?? '',
+      role: SwapRole.buying,
+      status: swapStatus,
+      meetupLocation: null,
+      lastUpdated:
+          DateTime.tryParse(json['transaction_date'] as String? ?? '') ?? DateTime.now(),
+    );
+  }
+
+  String _firstImage(Map<String, dynamic> item) {
+    final images = item['images'] as List<dynamic>?;
+    if (images != null && images.isNotEmpty) {
+      final first = images.first;
+      if (first is Map<String, dynamic>) {
+        return (first['image'] as String?) ?? '';
+      }
+      return first.toString();
+    }
+    return '';
+  }
+
+  SwapStatus _parseStatus(String status) {
+    switch (status) {
+      case 'completed':
+        return SwapStatus.completed;
+      case 'cancelled':
+        return SwapStatus.cancelled;
+      case 'pending':
+        return SwapStatus.proposalSent;
+      default:
+        return SwapStatus.proposalSent;
+    }
   }
 }

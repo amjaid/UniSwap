@@ -1,3 +1,4 @@
+import 'package:image_picker/image_picker.dart' show XFile;
 import 'package:uniswap/services/api_client.dart';
 
 /// Authentication service for Django JWT backend.
@@ -87,11 +88,43 @@ class DjangoAuthService {
   }
 
   /// Update the current user's profile fields.
+  ///
+  /// If [avatarFile] is provided, it is sent as a multipart PATCH to
+  /// `/users/me/` with the file in the `avatar` field. The backend
+  /// `UserDetailSerializer` handles saving the file to the `avatar`
+  /// ImageField and updating `avatar_url` accordingly.
+  ///
+  /// After a successful update, automatically refetches the full user
+  /// profile from the server to ensure all fields are up to date.
   Future<ApiResponse> updateProfile({
     String? name,
     String? bio,
     String? avatarUrl,
+    XFile? avatarFile,
   }) async {
+    // If an avatar file is provided, send it as multipart PATCH
+    if (avatarFile != null) {
+      final fields = <String, String>{};
+      if (name != null) fields['name'] = name;
+      if (bio != null) fields['bio'] = bio;
+      if (avatarUrl != null) fields['avatar_url'] = avatarUrl;
+
+      final response = await _apiClient.patchMultipart(
+        '/users/me/',
+        fieldName: 'avatar',
+        file: avatarFile,
+        fields: fields.isNotEmpty ? fields : null,
+      );
+
+      if (response.isSuccess) {
+        // Refetch the full user profile to ensure all fields are consistent
+        await fetchCurrentUser();
+      }
+
+      return response;
+    }
+
+    // No avatar file - send as JSON PATCH
     final body = <String, dynamic>{};
     if (name != null) body['name'] = name;
     if (bio != null) body['bio'] = bio;
@@ -99,8 +132,9 @@ class DjangoAuthService {
 
     final response = await _apiClient.patch('/users/me/', body: body);
 
-    if (response.isSuccess && response.data != null) {
-      _currentUser = response.data;
+    if (response.isSuccess) {
+      // Refetch the full user profile to ensure all fields are consistent
+      await fetchCurrentUser();
     }
 
     return response;

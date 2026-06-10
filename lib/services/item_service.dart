@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:image_picker/image_picker.dart' show XFile;
 import 'package:uniswap/services/api_client.dart';
 
 /// Service for item listing CRUD operations and search/filter.
@@ -52,13 +51,25 @@ class ItemService {
     required double price,
     required String condition,
     required int category,
-    List<File>? images,
+    List<XFile>? images,
   }) async {
+    // Map display condition names to backend enum values
+    final conditionMap = {
+      'new': 'new',
+      'like new': 'like_new',
+      'good': 'good',
+      'fair': 'fair',
+      'used': 'fair', // 'Used' in dropdown maps to 'fair'
+    };
+
+    final normalizedCondition =
+        (conditionMap[condition.trim().toLowerCase()] ?? 'good');
+
     final body = <String, dynamic>{
       'title': title,
       'description': description,
-      'price': price.toString(),
-      'condition': condition,
+      'price': price, // Send as number, not string
+      'condition': normalizedCondition,
       'category': category,
     };
 
@@ -66,6 +77,9 @@ class ItemService {
   }
 
   /// Update an existing item listing.
+  ///
+  /// Sends text fields as JSON PATCH. If [newImages] is provided, sends
+  /// a multipart PATCH with the first image attached as `image` field.
   Future<ApiResponse> updateItem(
     int itemId, {
     String? title,
@@ -73,12 +87,52 @@ class ItemService {
     double? price,
     String? condition,
     int? category,
+    List<XFile>? newImages,
   }) async {
+    // If there are new images, send as multipart PATCH
+    if (newImages != null && newImages.isNotEmpty) {
+      final fields = <String, String>{};
+      if (title != null) fields['title'] = title;
+      if (description != null) fields['description'] = description;
+      if (price != null) fields['price'] = price.toString();
+      if (condition != null) {
+        final conditionMap = {
+          'new': 'new',
+          'like new': 'like_new',
+          'good': 'good',
+          'fair': 'fair',
+          'used': 'fair',
+        };
+        fields['condition'] =
+            conditionMap[condition.trim().toLowerCase()] ?? condition;
+      }
+      if (category != null) fields['category'] = category.toString();
+
+      return _apiClient.patchMultipart(
+        '/items/$itemId/',
+        fieldName: 'image',
+        file: newImages.first,
+        fields: fields.isNotEmpty ? fields : null,
+      );
+    }
+
+    // No images - send as JSON PATCH
     final body = <String, dynamic>{};
     if (title != null) body['title'] = title;
     if (description != null) body['description'] = description;
-    if (price != null) body['price'] = price.toString();
-    if (condition != null) body['condition'] = condition;
+    if (price != null) body['price'] = price; // Send as number, not string
+    if (condition != null) {
+      // Map display condition names to backend enum values
+      final conditionMap = {
+        'new': 'new',
+        'like new': 'like_new',
+        'good': 'good',
+        'fair': 'fair',
+        'used': 'fair',
+      };
+      body['condition'] =
+          conditionMap[condition.trim().toLowerCase()] ?? condition;
+    }
     if (category != null) body['category'] = category;
 
     return _apiClient.patch('/items/$itemId/', body: body);

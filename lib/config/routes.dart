@@ -10,6 +10,7 @@ import 'package:uniswap/views/chat_screen.dart';
 import 'package:uniswap/views/home_screen.dart';
 import 'package:uniswap/views/explore_screen.dart';
 import 'package:uniswap/views/create_listing_screen.dart';
+import 'package:uniswap/views/edit_listing_screen.dart';
 import 'package:uniswap/views/listing_detail_screen.dart';
 import 'package:uniswap/views/profile_screen.dart';
 import 'package:uniswap/views/swap_detail_screen.dart';
@@ -26,18 +27,15 @@ final goRouterRefreshProvider = Provider<GoRouterRefreshNotifier>((ref) {
 });
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final authAsync = ref.watch(authStateProvider);
+  // authStateProvider is now a StateProvider — returns Map<String, dynamic>? directly
+  final userData = ref.watch(authStateProvider);
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: '/',
     refreshListenable: ref.watch(goRouterRefreshProvider),
     redirect: (context, state) {
-      // Show splash while auth is loading
-      if (authAsync.isLoading) return null;
-
       final location = state.uri.path;
-      final userData = authAsync.valueOrNull;
       final isLoggedIn = userData != null;
       final isSigningIn = location == '/sign-in' || location == '/sign-up';
 
@@ -101,17 +99,17 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
       GoRoute(
-        path: '/swap-hub/:swapId',
+        path: '/swap-hub/:transactionId',
         name: 'swapDetail',
         builder: (context, state) => SwapDetailScreen(
-          swapId: state.pathParameters['swapId']!,
+          transactionId: state.pathParameters['transactionId']!,
         ),
       ),
       GoRoute(
-        path: '/chat/:swapId',
+        path: '/chat/:chatId',
         name: 'chat',
         builder: (context, state) => ChatScreen(
-          swapId: state.pathParameters['swapId']!,
+          chatId: state.pathParameters['chatId']!,
         ),
       ),
       GoRoute(
@@ -125,6 +123,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => ListingDetailScreen(
           listingId: state.pathParameters['listingId']!,
         ),
+      ),
+      GoRoute(
+        path: '/listing/:listingId/edit',
+        name: 'editListing',
+        builder: (context, state) {
+          final listing = state.extra as dynamic;
+          return EditListingScreen(listing: listing);
+        },
       ),
       GoRoute(
         path: '/saved',
@@ -174,7 +180,7 @@ bool _requiresAuth(String location) {
 
 class GoRouterRefreshNotifier extends ChangeNotifier {
   GoRouterRefreshNotifier(this.ref) {
-    _subscription = ref.listen<AsyncValue<Map<String, dynamic>?>>(
+    _subscription = ref.listen<Map<String, dynamic>?>(
       authStateProvider,
       (_, __) {
         notifyListeners();
@@ -183,7 +189,7 @@ class GoRouterRefreshNotifier extends ChangeNotifier {
   }
 
   final Ref ref;
-  late final ProviderSubscription<AsyncValue<Map<String, dynamic>?>> _subscription;
+  late final ProviderSubscription<Map<String, dynamic>?> _subscription;
 
   @override
   void dispose() {

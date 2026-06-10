@@ -152,9 +152,18 @@ class UserListSerializer(serializers.ModelSerializer):
 class UserDetailSerializer(serializers.ModelSerializer):
     """
     Detailed serializer for a single user profile.
+
+    Derives avatar_url from the avatar ImageField if avatar_url is not
+    explicitly set. This ensures that users who upload via the
+    upload_avatar endpoint always get a valid URL back.
+
+    The `avatar` field accepts file uploads via multipart/form-data
+    (e.g., from PATCH /api/users/me/). When a file is provided, it
+    is saved to the avatar ImageField and avatar_url is updated.
     """
     profile = UserProfileSerializer(read_only=True)
     settings = UserSettingsSerializer(read_only=True)
+    avatar = serializers.ImageField(required=False, allow_null=True)
 
     class Meta:
         model = User
@@ -167,3 +176,45 @@ class UserDetailSerializer(serializers.ModelSerializer):
             'id', 'email', 'university_domain',
             'is_active', 'date_joined',
         ]
+
+    def update(self, instance, validated_data):
+        """Handle avatar file upload and update avatar_url accordingly."""
+        avatar_file = validated_data.pop('avatar', None)
+        if avatar_file is not None:
+            instance.avatar.save(avatar_file.name, avatar_file, save=False)
+            # Build the full URL for avatar_url
+            request = self.context.get('request')
+            if request:
+                instance.avatar_url = request.build_absolute_uri(
+                    instance.avatar.url
+                )
+            else:
+                instance.avatar_url = instance.avatar.url
+
+        # Update remaining fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        instance.save()
+        return instance
+
+    def to_representation(self, instance):
+        """Ensure avatar_url is always populated.
+
+        If avatar_url is empty but avatar (ImageField) has a file,
+        derive the URL from the avatar field. If both are empty,
+        return an empty string.
+        """
+        data = super().to_representation(instance)
+
+        # If avatar_url is empty but avatar has a file, build the URL
+        if not data.get('avatar_url') and instance.avatar:
+            request = self.context.get('request')
+            if request:
+                data['avatar_url'] = request.build_absolute_uri(
+                    instance.avatar.url
+                )
+            else:
+                data['avatar_url'] = instance.avatar.url
+
+        return data

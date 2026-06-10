@@ -159,6 +159,72 @@ class ItemViewSet(viewsets.ModelViewSet):
             ).data
         )
 
+    @action(detail=True, methods=['post'], url_path='upload_image')
+    def upload_image(self, request, pk=None):
+        """
+        Upload an image for an item listing.
+
+        Accepts a multipart form with an 'image' file field.
+        Saves the file to the item's image directory and appends
+        the URL to the item's images JSON array.
+        """
+        from django.core.files.storage import default_storage
+        from django.core.files.base import ContentFile
+        import os
+        import uuid
+
+        item = self.get_object()
+
+        # Only the seller can upload images
+        if item.seller != request.user:
+            return Response(
+                {'error': 'Only the seller can upload images for this item.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if 'image' not in request.FILES:
+            return Response(
+                {'error': 'No image file provided. Use field name "image".'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        file = request.FILES['image']
+
+        # Validate file type
+        ext = os.path.splitext(file.name)[1].lower()
+        allowed_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
+        if ext not in allowed_extensions:
+            return Response(
+                {'error': f'Unsupported file type "{ext}". Allowed: {", ".join(allowed_extensions)}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validate file size (10MB max)
+        if file.size > 10 * 1024 * 1024:
+            return Response(
+                {'error': 'File too large. Maximum size is 10MB.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Save file with a unique name
+        unique_name = f'items/{item.id}/{uuid.uuid4().hex}{ext}'
+        saved_path = default_storage.save(unique_name, ContentFile(file.read()))
+        image_url = request.build_absolute_uri(
+            default_storage.url(saved_path)
+        )
+
+        # Append to the item's images JSON array
+        current_images = list(item.images) if item.images else []
+        current_images.append(image_url)
+        item.images = current_images
+        item.save(update_fields=['images'])
+
+        return Response({
+            'message': 'Image uploaded successfully.',
+            'image_url': image_url,
+            'image_count': len(current_images),
+        })
+
     @action(detail=True, methods=['post'])
     def mark_available(self, request, pk=None):
         """

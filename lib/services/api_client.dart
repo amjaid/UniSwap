@@ -1,8 +1,9 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' show SocketException;
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart' show XFile;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Central HTTP client for all API calls to the Django backend.
@@ -151,15 +152,26 @@ class ApiClient {
     return _execute(() => _httpClient.delete(uri, headers: headers), path);
   }
 
-  /// Upload a file via multipart POST request.
+  /// Upload a file via multipart request.
+  ///
+  /// Accepts an [XFile] from `image_picker` which works on all platforms
+  /// (web, Android, iOS). Uses `MultipartFile.fromBytes()` internally
+  /// instead of `fromPath()` to avoid `dart:io` dependency on web.
+  ///
+  /// [path] - API endpoint path (e.g., '/items/1/upload_image/')
+  /// [fieldName] - The form field name expected by the backend (e.g., 'image', 'avatar')
+  /// [file] - The image file to upload (XFile from image_picker)
+  /// [additionalFields] - Optional extra form fields to include
+  /// [method] - HTTP method to use (defaults to POST)
   Future<ApiResponse> uploadFile(
     String path, {
     required String fieldName,
-    required File file,
+    required XFile file,
     Map<String, String>? additionalFields,
+    String method = 'POST',
   }) async {
     final uri = _buildUri(path);
-    final request = http.MultipartRequest('POST', uri);
+    final request = http.MultipartRequest(method, uri);
 
     // Attach auth header
     final token = await getAccessToken();
@@ -167,12 +179,64 @@ class ApiClient {
       request.headers['Authorization'] = 'Bearer $token';
     }
 
-    // Attach file
-    request.files.add(await http.MultipartFile.fromPath(fieldName, file.path));
+    // Read file bytes (works on all platforms including web)
+    final bytes = await file.readAsBytes();
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        fieldName,
+        bytes,
+        filename: file.name,
+      ),
+    );
 
     // Attach additional fields
     if (additionalFields != null) {
       request.fields.addAll(additionalFields);
+    }
+
+    final streamedResponse = await _httpClient.send(request);
+    final response = await http.Response.fromStream(streamedResponse);
+    return _processResponse(response, path);
+  }
+
+  /// Send a multipart PATCH request with a file and optional JSON fields.
+  ///
+  /// This is used for updating user profiles with avatar uploads.
+  /// The file is sent as multipart/form-data along with any additional
+  /// text fields. Uses `MultipartFile.fromBytes()` for web compatibility.
+  ///
+  /// [path] - API endpoint path (e.g., '/users/me/')
+  /// [fieldName] - The form field name for the file (e.g., 'avatar')
+  /// [file] - The file to upload (XFile from image_picker)
+  /// [fields] - Optional additional text fields to include in the form
+  Future<ApiResponse> patchMultipart(
+    String path, {
+    required String fieldName,
+    required XFile file,
+    Map<String, String>? fields,
+  }) async {
+    final uri = _buildUri(path);
+    final request = http.MultipartRequest('PATCH', uri);
+
+    // Attach auth header
+    final token = await getAccessToken();
+    if (token != null) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+
+    // Read file bytes (works on all platforms including web)
+    final bytes = await file.readAsBytes();
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        fieldName,
+        bytes,
+        filename: file.name,
+      ),
+    );
+
+    // Attach additional text fields
+    if (fields != null) {
+      request.fields.addAll(fields);
     }
 
     final streamedResponse = await _httpClient.send(request);
@@ -235,6 +299,9 @@ class ApiClient {
   ) async {
     if (kDebugMode) {
       debugPrint('${response.statusCode} ${response.request?.url}');
+      if (response.body.isNotEmpty && response.body.length < 2000) {
+        debugPrint('Response body: ${response.body}');
+      }
     }
 
     // Try to parse body as JSON
@@ -292,6 +359,10 @@ class ApiClient {
       }
     }
 
+    if (kDebugMode) {
+      debugPrint('[ApiClient] Error $path: $errorMessage');
+    }
+
     return ApiResponse.error(errorMessage, statusCode: response.statusCode);
   }
 
@@ -322,7 +393,6 @@ class ApiClient {
 
     return false;
   }
-
 }
 
 /// Typed response wrapper for API calls.

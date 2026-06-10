@@ -29,10 +29,25 @@ class ChatService {
 
   /// Fetch the current user's chat conversations.
   Future<ApiResponse> fetchChats({int page = 1}) async {
-    return _apiClient.get(
+    if (kDebugMode) {
+      debugPrint('[ChatService] Fetching chats page $page...');
+    }
+    final response = await _apiClient.get(
       '/chats/',
       queryParams: {'page': page.toString()},
     );
+    if (kDebugMode) {
+      debugPrint('[ChatService] Response success=${response.isSuccess}, data=${response.data}');
+      if (response.error != null) {
+        debugPrint('[ChatService] Error: ${response.error}');
+      }
+    }
+    return response;
+  }
+
+  /// Fetch a single chat by ID with full details.
+  Future<ApiResponse> fetchChat(int chatId) async {
+    return _apiClient.get('/chats/$chatId/');
   }
 
   /// Create a new chat conversation with participants.
@@ -48,17 +63,128 @@ class ChatService {
     return _apiClient.post('/chats/', body: body);
   }
 
+  /// Find an existing chat with a participant, or create a new one.
+  ///
+  /// A pair of users must have only **one** chat ID — no more than one.
+  /// This method ensures that by:
+  /// 1. Iterating through all paginated chats (`GET /api/chats/`) looking for
+  ///    any chat where `participant_names` contains a user with `id == participantId`.
+  ///    The `itemId` is **ignored** during lookup — only the participant match matters.
+  /// 2. If found, returns the existing chat's ID.
+  /// 3. If not found, calls `POST /api/chats/` with `participant_ids` and
+  ///    optionally `item_id`, then returns the new chat's ID.
+  ///
+  /// Returns `null` if both lookup and creation fail.
+  Future<int?> getOrCreateChatId({
+    required int participantId,
+    int? itemId,
+  }) async {
+    if (kDebugMode) {
+      debugPrint('[ChatService] getOrCreateChatId(participantId=$participantId, itemId=$itemId)');
+    }
+
+    // Step 1: Iterate through all paginated chats looking for a participant match
+    int page = 1;
+    bool hasMore = true;
+
+    while (hasMore) {
+      final response = await fetchChats(page: page);
+      if (!response.isSuccess || response.data == null) break;
+
+      final data = response.data!;
+      final chats = data['results'] as List<dynamic>? ?? [];
+
+      // Look for a chat where the target participant is present
+      for (final chat in chats) {
+        if (chat is! Map<String, dynamic>) continue;
+
+        final chatId = chat['id'] as int?;
+        final participantNames = chat['participant_names'] as List<dynamic>? ?? [];
+
+        final hasParticipant = participantNames.any((p) {
+          if (p is Map<String, dynamic>) {
+            return p['id'] == participantId;
+          }
+          return false;
+        });
+
+        if (hasParticipant && chatId != null) {
+          if (kDebugMode) {
+            debugPrint('[ChatService] Found existing chat $chatId with participant $participantId');
+          }
+          return chatId;
+        }
+      }
+
+      // Check if there are more pages
+      final next = data['next'];
+      hasMore = next != null && next is String && next.isNotEmpty;
+      page++;
+    }
+
+    // Step 2: No existing chat found — create a new one
+    if (kDebugMode) {
+      debugPrint('[ChatService] No existing chat found with participant $participantId, creating new one...');
+    }
+
+    final createResponse = await createChat(
+      participantIds: [participantId],
+      itemId: itemId,
+    );
+
+    if (createResponse.isSuccess && createResponse.data != null) {
+      final newChatId = createResponse.data!['id'] as int?;
+      if (kDebugMode) {
+        debugPrint('[ChatService] Created new chat $newChatId');
+      }
+      return newChatId;
+    }
+
+    if (kDebugMode) {
+      debugPrint('[ChatService] Failed to create chat: ${createResponse.error}');
+    }
+    return null;
+  }
+
   /// Fetch messages for a specific chat.
-  Future<ApiResponse> fetchMessages(int chatId) async {
-    return _apiClient.get('/chats/$chatId/messages/');
+  ///
+  /// Uses the `/api/messages/` endpoint (ChatMessageViewSet) filtered by chat.
+  Future<ApiResponse> fetchMessages(int chatId, {int page = 1}) async {
+    if (kDebugMode) {
+      debugPrint('[ChatService] fetchMessages(chatId=$chatId, page=$page)');
+    }
+    final response = await _apiClient.get(
+      '/messages/',
+      queryParams: {
+        'chat': chatId.toString(),
+        'page': page.toString(),
+      },
+    );
+    if (kDebugMode) {
+      debugPrint('[ChatService] fetchMessages response: success=${response.isSuccess}, data=${response.data}');
+      if (response.error != null) {
+        debugPrint('[ChatService] fetchMessages error: ${response.error}');
+      }
+    }
+    return response;
   }
 
   /// Send a message in a chat.
   Future<ApiResponse> sendMessage(int chatId, String content) async {
-    return _apiClient.post(
+    if (kDebugMode) {
+      debugPrint('[ChatService] sendMessage(chatId=$chatId, content="$content")');
+    }
+    final response = await _apiClient.post(
       '/chats/$chatId/send_message/',
       body: {'content': content},
     );
+    if (kDebugMode) {
+      debugPrint('[ChatService] sendMessage response: success=${response.isSuccess}, data=${response.data}');
+      if (response.error != null) {
+        debugPrint('[ChatService] sendMessage error: ${response.error}');
+      }
+    }
+    return response;
   }
 
   /// Mark all messages in a chat as read for the current user.

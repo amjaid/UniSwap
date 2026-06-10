@@ -103,8 +103,9 @@ backend/                 # Django project root
 | `lib/services/item_service.dart` | `ItemService` | Item CRUD, search/filter, wishlist, mark_sold/available |
 | `lib/services/transaction_service.dart` | `TransactionService` | Transaction lifecycle, reviews |
 | `lib/services/chat_service.dart` | `ChatService` | Chats, messages, polling for real-time updates |
-| `lib/services/django_notification_service.dart` | `DjangoNotificationService` | Notifications CRUD, unread polling |
+| `lib/services/django_notification_service.dart` | `DjangoNotificationService` | Notifications CRUD, unread polling with exponential backoff on 429 |
 | `lib/services/django_storage_service.dart` | `DjangoStorageService` | Image uploads for items and avatars |
+| `lib/services/chat_message_store.dart` | `ChatMessageStore` | **NEW** — Persistent chat message store that survives screen navigation. Prevents "messages vanish" bug by keeping messages in memory across chat screen re-entries. Uses ID-based merge on polling, never replaces the entire list. |
 | `lib/services/providers.dart` | Riverpod providers | All service providers + auth state provider |
 
 ### Updated Files
@@ -116,10 +117,31 @@ backend/                 # Django project root
 | `lib/viewmodels/auth_viewmodel.dart` | Auth state provider, sign in/up/forgot password view models with Django JWT |
 | `lib/viewmodels/chat_viewmodel.dart` | Chat state management using ChatService, polling for new messages |
 | `lib/viewmodels/inbox_viewmodel.dart` | Inbox state management using ChatService, polling for new chats |
-| `lib/views/profile_screen.dart` | Uses DjangoAuthService + DjangoStorageService, removed Firebase references |
-| `lib/views/home_screen.dart` | Uses authStateProvider with Map accessors instead of Firebase User |
-| `lib/views/listing_detail_screen.dart` | Uses ChatService for chat creation, removed FirestoreService |
+| `lib/views/profile_screen.dart` | Uses DjangoAuthService + DjangoStorageService, removed Firebase references, dynamic stats from API. Shows actual listing images via `getFullImageUrl()` instead of placeholder icon |
+| `lib/views/home_screen.dart` | Uses authStateProvider with Map accessors instead of Firebase User, dynamic avatar. Uses `getFullImageUrl()` for listing images in both horizontal and grid cards |
+| `lib/views/listing_detail_screen.dart` | Uses ChatService for chat creation, removed FirestoreService, removed hardcoded data. Added Edit/Delete popup menu for sellers. Uses `getFullImageUrl()` with `errorBuilder` fallback |
+| `lib/views/edit_listing_screen.dart` | **NEW** - Edit listing screen with pre-populated fields, image picker, category/condition dropdowns |
 | `lib/views/chat_screen.dart` | Uses user['id'] Map accessor instead of user.uid |
+| `lib/views/create_listing_screen.dart` | Image picker integration, uploads photo via DjangoStorageService after creating item |
+| `lib/viewmodels/create_listing_viewmodel.dart` | Now accepts DjangoStorageService, uploads image after item creation |
+| `lib/views/placeholder_screens.dart` | SplashScreen, PublicProfileScreen, SavedListingsScreen, SettingsScreen, ReportScreen all use API data. Uses `getFullImageUrl()` for saved listings images |
+| `lib/views/explore_screen.dart` | Uses `getFullImageUrl()` for listing images |
+| `lib/views/swap_hub_screen.dart` | Uses `getFullImageUrl()` for swap item images |
+| `lib/views/swap_detail_screen.dart` | Uses `getFullImageUrl()` for swap item images |
+| `lib/models/listing.dart` | Added `fromJson` factory, `listFromJson`, `sellerId`, `sellerAvatarUrl`, `createdAt` fields |
+| `lib/models/conversation_thread.dart` | Added `fromJson` factory, `listFromJson`, `lastMessage`, `unreadCount` fields |
+| `lib/models/chat_message.dart` | Added `fromJson` factory, `listFromJson`, `isRead` field |
+| `lib/models/notification.dart` | Added `fromJson` factory, `listFromJson`, `type`, `createdAt` fields |
+| `lib/repositories/listing_repository.dart` | Wraps ItemService, fetches from Django API, removed seed data |
+| `lib/repositories/swap_repository.dart` | Wraps TransactionService, fetches from Django API, removed seed data |
+| `lib/viewmodels/home_viewmodel.dart` | Uses ListingRepository, async fetchFeatured/fetchNearby |
+| `lib/viewmodels/explore_viewmodel.dart` | Uses ListingRepository, async search with filters |
+| `lib/viewmodels/create_listing_viewmodel.dart` | Uses ListingRepository.createListing via Django API |
+| `lib/viewmodels/swap_hub_viewmodel.dart` | Uses SwapRepository, async fetchSwaps |
+| `lib/viewmodels/swap_detail_viewmodel.dart` | Uses SwapRepository, imports swapHubViewModelProvider for refresh |
+| `lib/viewmodels/auth_viewmodel.dart` | Uses DjangoAuthService, FutureProvider instead of StreamProvider |
+| `lib/viewmodels/chat_viewmodel.dart` | Uses ChatService, polling for new messages |
+| `lib/viewmodels/inbox_viewmodel.dart` | Uses ChatService, polling for new chats |
 | `pubspec.yaml` | Added `http`, `shared_preferences`, `share_plus`, `tutorial_coach_mark` |
 
 ### Key Design Decisions
@@ -132,6 +154,28 @@ backend/                 # Django project root
   - **Android** → `http://10.0.2.2:8000/api` (emulator loopback)
   - **iOS/macOS** → `http://localhost:8000/api`
   - Override via constructor parameter or `API_BASE_URL` env var
+- **Image URL resolution**: `getFullImageUrl()` utility in `lib/utils/image_utils.dart` converts relative paths (e.g., `/media/images/abc.jpg`) to absolute URLs by prepending the API base URL. Used by all screens to safely display listing/swap/avatar images. Returns empty string for null/empty input, passes through absolute URLs unchanged.
+- **Avatar upload flow**:
+  1. Flutter picks image via `ImagePicker` → gets `XFile`
+  2. Flutter calls `authService.updateProfile(avatarFile: image)` which sends multipart PATCH to `/api/users/me/` with `avatar` file field
+  3. Backend `UserDetailSerializer.update()` saves file to `CustomUser.avatar` (ImageField) and updates `avatar_url` with the full absolute URL
+  4. `DjangoAuthService.updateProfile()` automatically refetches `GET /api/users/me/` after PATCH to sync all fields
+  5. `UserDetailSerializer.to_representation()` derives `avatar_url` from `avatar` ImageField if `avatar_url` is empty
+  6. `ProfileScreen._resolveAvatarUrl()` prepends base URL if the avatar URL is relative
+  7. `authStateProvider` (FutureProvider) auto-refreshes when auth state changes
+- **No separate upload endpoint**: Avatar upload uses the existing `PATCH /api/users/me/` endpoint with `multipart/form-data` encoding. The `avatar` field is declared as `serializers.ImageField()` in `UserDetailSerializer` to accept file uploads.
+- **Provider naming**: All service providers use consistent naming in `lib/services/providers.dart`:
+  - `apiClientProvider` → `ApiClient`
+  - `djangoAuthServiceProvider` → `DjangoAuthService`
+  - `itemServiceProvider` → `ItemService`
+  - `chatServiceProvider` → `ChatService`
+  - `transactionServiceProvider` → `TransactionService`
+  - `notificationServiceProvider` → `DjangoNotificationService`
+  - `storageServiceProvider` → `DjangoStorageService`
+  - `listingRepositoryProvider` → `ListingRepository` (wraps `itemServiceProvider`)
+  - `swapRepositoryProvider` → `SwapRepository` (wraps `transactionServiceProvider`)
+- **Code quality**: `dart analyze lib/` produces **0 errors, 0 warnings** (only 9 informational hints about `use_build_context_synchronously` in `swap_detail_screen.dart` which are common in Flutter async UI code)
+- **Django tests**: 47 integration tests covering all endpoints pass consistently
 
 ---
 
@@ -243,3 +287,125 @@ flutter run
 5. **Docker Compose** for local development
 6. **Rate limiting** refinement for production
 7. **Flutter screens** update to use new service layer ✅ COMPLETE
+
+---
+
+## Critical Bug Fixes (June 2026)
+
+### Bug 1: Transaction History – Type Mismatch
+- **Root cause**: Backend `TransactionSerializer` returns `buyer`/`seller` as nested objects `{"id": 1, "name": "..."}`, but `swap_hub_screen.dart` was casting them directly as `int?`.
+- **Fix**: Added `extractUserId()` helper that handles both `int` and `Map<String, dynamic>` formats. Applied to both the tab splitting logic and `_TransactionCard` widget.
+
+### Bug 2: Notifications – Wrong Endpoint
+- **Root cause**: Frontend called `/notifications/unread_count/` but backend defines the action as `unread` at `/notifications/unread/`.
+- **Fix**: Changed URL in `DjangoNotificationService.fetchUnreadCount()` from `/notifications/unread_count/` to `/notifications/unread/`. The response parsing already correctly reads `response.data!['unread_count']`.
+
+### Bug 3: Chat Not Loading in Inbox
+- **Root cause**: `ConversationThread.fromJson` looked for `json['participants']` but the backend `ChatListSerializer` returns `participant_names` (not `participants`) in GET responses. The `participants` field is `write_only=True` for creation only. Also, `last_message` is a nested object `{"content": "...", "sender_name": "...", "created_at": "..."}` from `get_last_message()`, not a plain string.
+- **Fix**: Updated `ConversationThread.fromJson` to read from `participant_names` instead of `participants`, and parse `last_message` as a nested `Map<String, dynamic>` with fallback to plain string.
+- **Debugging**: Added `debugPrint` logging to `ChatService.fetchChats()` and `ApiClient._processResponse()` to help diagnose future API issues.
+
+### Bug 4: Inbox Shows Duplicate Chat Entries for Same Person
+- **Root cause**: Backend creates a new chat every time the user clicks "Contact Seller" for the same item (or different items with the same seller). The frontend was displaying all chats as separate entries, causing the same person to appear multiple times.
+- **Fix**: Added `contactId` field to `ConversationThread` model (the other participant's user ID). Added `ConversationThread.deduplicateByContact()` static method that groups chats by `contactId` and keeps only the most recent chat per contact (by `lastTimestamp`). Chats with no valid contact (`contactId <= 0`) are filtered out as stale/invalid.
+- **Files changed**:
+  - `lib/models/conversation_thread.dart` — Added `contactId` field and `deduplicateByContact()` method
+  - `lib/viewmodels/inbox_viewmodel.dart` — Calls `ConversationThread.deduplicateByContact()` after parsing chats
+- **Behavior**: Inbox now shows each person only once, with the most recent chat's message preview and timestamp. Tapping opens the most recent chat ID so message history is preserved.
+
+### Bug 5: TypeError – `type 'int' is not a subtype of type 'Map<String, dynamic>?'`
+- **Root cause**: The `TransactionSerializer` returns `item`, `buyer`, and `seller` as **plain FK integers** (e.g., `"item": 1`, `"buyer": 2`), not nested objects. However, `swap_hub_screen.dart` and `swap_detail_screen.dart` were casting `transaction['item']` directly as `Map<String, dynamic>?`, causing a runtime type error when the value was an `int`.
+- **Fix**: Updated all code that accesses `item`, `buyer`, and `seller` fields from transaction responses to handle both formats:
+  - `itemRaw is Map<String, dynamic> ? itemRaw : <String, dynamic>{}` — safe fallback to empty map
+  - `buyerRaw is int ? buyerRaw : (buyerRaw is Map<String, dynamic> ? buyerRaw['id'] as int? : null)` — handles both int and nested object
+  - Use flat fields (`item_title`, `item_price`, `buyer_name`, `seller_name`) instead of nested object traversal
+- **Files changed**:
+  - `lib/views/swap_hub_screen.dart` — `_TransactionCard.build()` now uses `itemRaw` type check, flat fields for title/price
+  - `lib/views/swap_detail_screen.dart` — `_buildContent()` and `_leaveReview()` now use type-safe extraction for `item`, `buyer`, `seller`
+  - `lib/repositories/swap_repository.dart` — `_swapFromJson()` now handles `item` and `seller` being either int or Map
+- **Verification**: `dart analyze lib/`: **0 errors, 0 warnings** (only 9 pre-existing `use_build_context_synchronously` hints). `python manage.py test`: **47/47 tests pass**.
+
+### Bug 6: Chat from Swap Hub – Wrong Chat ID (Transaction ID used instead of Chat ID)
+- **Root cause**: In `swap_detail_screen.dart`, the "Open Chat" button was passing `widget.transactionId` as the `swapId` parameter to the chat route. But the transaction ID (e.g., `1`) is not the same as the chat ID (e.g., `5`). The `ChatViewModel` then tried to call `fetchMessages(transactionId)` and `sendMessage(transactionId, ...)` which failed because no chat exists with that ID.
+- **Fix**: Added `_openChat()` method to `_SwapDetailScreenState` that:
+  1. Determines the other party's user ID from the transaction's `buyer`/`seller` fields (handles both int and nested Map formats)
+  2. Calls `chatService.createChat(participantIds: [otherUserId])` to find or create a chat with that user
+  3. Navigates to the chat screen with the correct chat ID from the response
+  4. Includes error handling with user-facing snackbar messages and debug logging
+- **Files changed**:
+  - `lib/views/swap_detail_screen.dart` — Added `_openChat()` method, changed "Open Chat" button to call it instead of directly navigating with transaction ID
+  - `lib/services/chat_service.dart` — Added debug logging to `fetchMessages()` and `sendMessage()` for easier debugging
+- **Verification**: `dart analyze lib/`: **0 errors, 0 warnings**. `python manage.py test`: **47/47 tests pass**.
+
+### Bug 9: Rate Limiting (429 Too Many Requests) – `authStateProvider` Polling on Every Route Change
+- **Root cause**: `authStateProvider` was a `FutureProvider` that called `authService.isAuthenticated()` → `fetchCurrentUser()` → `GET /api/users/me/`. Every time the provider was invalidated or re-read (e.g., on route changes via `GoRouterRefreshNotifier`), it triggered a new API call. With rapid navigation, this caused the backend's rate limiter (1000/hr authenticated) to trigger 429 responses.
+- **Fix (three changes)**:
+  1. **Changed `authStateProvider` from `FutureProvider` to `StateProvider`** — A `StateProvider` does NOT re-evaluate on dependency changes. It only updates when explicitly set via `ref.read(authStateProvider.notifier).state = ...`. This eliminates all automatic API calls.
+  2. **Added `initializeAuthState()` and `refreshAuthState()` functions** — `initializeAuthState()` is called once on app startup (e.g., in `main.dart` splash screen) to check stored tokens and fetch the user profile. `refreshAuthState()` is called explicitly after login, registration, or profile updates. `clearAuthState()` is called on logout.
+  3. **Updated `GoRouterRefreshNotifier`** — Now listens to `StateProvider<Map<String, dynamic>?>` instead of `FutureProvider<Map<String, dynamic>?>`. The `ref.listen()` subscription type changed from `AsyncValue<Map<String, dynamic>?>` to `Map<String, dynamic>?`.
+- **Files changed**:
+  - `lib/viewmodels/auth_viewmodel.dart` — `authStateProvider` changed from `FutureProvider` to `StateProvider`. Added `initializeAuthState()`, `refreshAuthState()`, `clearAuthState()` functions. `SignInViewModel.signIn()` and `SignUpViewModel.signUp()` now call `refreshAuthState()` after success.
+  - `lib/config/routes.dart` — `GoRouterRefreshNotifier` now listens to `StateProvider<Map<String, dynamic>?>`. All `.valueOrNull` accessors removed since `StateProvider` returns the value directly.
+  - `lib/views/chat_screen.dart` — `ref.watch(authStateProvider).valueOrNull` → `ref.watch(authStateProvider)`
+  - `lib/views/listing_detail_screen.dart` — Same fix
+  - `lib/views/swap_detail_screen.dart` — Same fix (two occurrences)
+  - `lib/views/swap_hub_screen.dart` — Same fix
+  - `lib/views/home_screen.dart` — Same fix (was `authState.valueOrNull`)
+  - `lib/views/profile_screen.dart` — Same fix (was `authState.valueOrNull`)
+  - `lib/views/placeholder_screens.dart` — Same fix (two occurrences: `PublicProfileScreen` and `SettingsScreen`)
+  - `lib/viewmodels/inbox_viewmodel.dart` — Same fix
+  - `lib/viewmodels/chat_viewmodel.dart` — Same fix
+- **Verification**: `dart analyze lib/`: **0 errors, 0 warnings** (only 9 pre-existing `use_build_context_synchronously` hints). `python manage.py test`: **47/47 tests pass**.
+
+### Bug 10: Notification Polling Causes Rate Limiting (No Backoff on 429)
+- **Root cause**: `DjangoNotificationService` used a fixed 30-second `Timer.periodic` for polling. When the backend returned 429 (rate limited), the service would continue polling at the same interval, compounding the rate limiting issue.
+- **Fix**: Replaced `Timer.periodic` with dynamic `Timer` scheduling that adjusts the interval based on response status:
+  - **Success**: Reset to base 30-second interval
+  - **429 response**: Apply exponential backoff (doubles each time, up to 5 minutes max). Also parses the backend's suggested wait time from the error message (e.g., "Expected available in 1172 seconds.")
+  - **Other errors**: Apply mild backoff (doubles each time)
+  - **Request deduplication**: Added `_isPolling` flag to skip polls that are already in flight, preventing concurrent requests
+- **Files changed**:
+  - `lib/services/django_notification_service.dart` — Complete rewrite of polling logic: `Timer.periodic` → `Timer` with dynamic scheduling, added `_applyBackoff()`, `_resetBackoff()`, `_isPolling` deduplication, 429 error message parsing
+- **Verification**: `dart analyze lib/`: **0 errors, 0 warnings**. `python manage.py test`: **47/47 tests pass**.
+
+### Bug 7: Chat Messages Disappear After Sending (Race Condition in Polling)
+- **Root cause**: Two issues combined to cause older messages to disappear after sending a new one:
+  1. **`sendMessage()` called `_fetchMessages()` after sending** — This replaced the entire message list with whatever the API returned. If the backend hadn't fully indexed the new message yet, the API could return an incomplete list, wiping the chat history.
+  2. **`_fetchMessages()` always replaced the entire list** — Even the 5-second polling timer would replace `state.messages` entirely on every tick. If any poll response returned an empty or incomplete list (e.g., due to timing), all existing messages would be lost.
+- **Fix (two changes in `_fetchMessages`)**:
+  1. **`sendMessage()` now appends locally** — After `chatService.sendMessage()` returns the new message object, it's parsed via `ChatMessage.fromJson()` and appended to the existing `state.messages` list. No API refetch is triggered.
+  2. **`_fetchMessages()` now merges instead of replacing** — On each poll, fetched messages are compared by ID against the existing list. Only messages with new IDs are appended. If no new messages are found and the initial load has already completed, the existing list is preserved untouched. This prevents any race condition where a delayed or empty API response would wipe the history.
+- **Files changed**:
+  - `lib/viewmodels/chat_viewmodel.dart` — `sendMessage()` appends locally; `_fetchMessages()` uses ID-based merge logic with extensive debug logging
+- **Verification**: `dart analyze lib/`: **0 errors, 0 warnings**. `python manage.py test`: **47/47 tests pass**.
+
+### Bug 8: Chat Navigation Uses Wrong Route Parameter Name (`swapId` → `chatId`)
+- **Root cause**: The chat route was defined as `/chat/:swapId` with parameter name `swapId`, and `ChatScreen` accepted `swapId` as a constructor parameter. This was confusing and error-prone — the value was actually a **chat ID**, not a swap/transaction ID. Additionally, `listing_detail_screen.dart` had a broken `catch` block that fell back to navigating with `listingId` as the chat ID when `chatService.createChat()` threw an exception, causing the app to navigate to `/chat/{listingId}` (a non-existent chat) instead of showing an error.
+- **Fix**:
+  1. **Renamed route parameter** from `swapId` to `chatId` in `routes.dart` — route is now `/chat/:chatId`
+  2. **Renamed `ChatScreen.swapId`** to `ChatScreen.chatId` — constructor and all internal references updated
+  3. **Renamed `chatViewModelProvider` family parameter** from `conversationId` to `chatId` for consistency
+  4. **Fixed `listing_detail_screen.dart` catch block** — removed the broken fallback that navigated with `listingId` as the chat ID. Now shows a SnackBar error message instead, and only navigates to chat when the API returns a valid chat ID
+  5. **Updated `swap_detail_screen.dart`** — changed `pathParameters: {'swapId': chatId}` to `pathParameters: {'chatId': chatId}`
+- **Files changed**:
+  - `lib/config/routes.dart` — Route path changed from `/chat/:swapId` to `/chat/:chatId`, parameter name updated
+  - `lib/views/chat_screen.dart` — `swapId` → `chatId` in constructor and all usages
+  - `lib/viewmodels/chat_viewmodel.dart` — `conversationId` → `chatId` in provider family parameter
+  - `lib/views/listing_detail_screen.dart` — Removed broken catch-block fallback, shows error SnackBar instead
+   - `lib/views/swap_detail_screen.dart` — `'swapId'` → `'chatId'` in `pathParameters`
+- **Verification**: `dart analyze lib/`: **0 errors, 0 warnings**. `python manage.py test`: **47/47 tests pass**.
+
+### Bug 11: Duplicate Chats Created on "Contact Seller" (Messages Appear to Vanish)
+- **Root cause**: Every time the user tapped "Contact Seller" on a listing detail page, the frontend called `POST /api/chats/` unconditionally, creating a brand new chat. Old messages were still in the original chat, but the user was taken to the new empty chat, making it look like messages had vanished. The backend already supported reusing existing chats — the frontend just wasn't checking for them.
+- **Fix (v1)**: Added `ChatService.getOrCreateChatId(participantId, {itemId})` that checked for existing chats by participant + item ID. This reduced duplicates per-item but still created multiple chats for the same two users discussing different items.
+- **Fix (v2 — refined)**: The requirement is that **a pair of users must have only one chat ID — no more than one**. Updated `getOrCreateChatId()` to:
+  1. **Ignore `itemId` during lookup** — only checks if a chat exists between the current user and the given `participantId`
+  2. **Paginate through all pages** of `GET /api/chats/` to find any existing chat with that participant
+  3. If found, returns the existing chat's ID (regardless of which item it was created for)
+  4. If not found, calls `POST /api/chats/` with `participant_ids` and optionally `item_id`, then returns the new chat's ID
+- **Files changed**:
+  - `lib/services/chat_service.dart` — `getOrCreateChatId()` now paginates through all chats, ignores `itemId` during lookup, only uses `itemId` during creation
+  - `lib/views/listing_detail_screen.dart` — "Chat" button now calls `chatService.getOrCreateChatId(participantId: sellerId)` without `itemId`
+  - `lib/views/swap_detail_screen.dart` — Already correct (no `itemId` passed)
+- **Behavior**: The same two users will always open the **same chat** (e.g., only chat ID 15, not 16, 17, etc.), regardless of which listing they click. All past messages (from any item) are visible in that single conversation.
+- **Verification**: `dart analyze lib/`: **0 errors, 0 warnings** (only 9 pre-existing `use_build_context_synchronously` hints). `python manage.py test`: **47/47 tests pass**.

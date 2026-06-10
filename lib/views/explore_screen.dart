@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uniswap/models/listing.dart';
+import 'package:uniswap/utils/image_utils.dart';
 import 'package:uniswap/viewmodels/explore_viewmodel.dart';
 
 class ExploreScreen extends ConsumerWidget {
@@ -169,7 +170,7 @@ class _ExploreCard extends StatelessWidget {
           children: [
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              child: Image.network(listing!.imageUrl, height: 90, width: double.infinity, fit: BoxFit.cover),
+              child: Image.network(getFullImageUrl(listing!.imageUrl), height: 90, width: double.infinity, fit: BoxFit.cover),
             ),
             Padding(
               padding: const EdgeInsets.all(10),

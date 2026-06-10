@@ -1,6 +1,10 @@
+import 'dart:io' as io;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:uniswap/viewmodels/create_listing_viewmodel.dart';
 
 class CreateListingScreen extends ConsumerWidget {
@@ -40,14 +44,57 @@ class CreateListingScreen extends ConsumerWidget {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemBuilder: (context, index) {
-                return Container(
-                  width: 110,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.black12),
+                // Show the selected image in the first slot, or empty slots
+                if (index == 0 && state.imageFile != null) {
+                  return GestureDetector(
+                    onTap: () => _pickImage(viewModel),
+                    child: Stack(
+                      children: [
+                        Container(
+                          width: 110,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            image: DecorationImage(
+                              image: _resolveImageProvider(state.imageFile!),
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          top: 4,
+                          right: 4,
+                          child: GestureDetector(
+                            onTap: viewModel.clearImage,
+                            child: Container(
+                              decoration: const BoxDecoration(
+                                color: Colors.black54,
+                                shape: BoxShape.circle,
+                              ),
+                              padding: const EdgeInsets.all(4),
+                              child: const Icon(
+                                Icons.close,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                // Empty slot - tap to pick image
+                return GestureDetector(
+                  onTap: () => _pickImage(viewModel),
+                  child: Container(
+                    width: 110,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.black12),
+                    ),
+                    child: const Icon(Icons.add_a_photo_outlined),
                   ),
-                  child: const Icon(Icons.add_a_photo_outlined),
                 );
               },
               separatorBuilder: (_, __) => const SizedBox(width: 12),
@@ -107,5 +154,32 @@ class CreateListingScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// Resolve an [ImageProvider] from an [XFile].
+  ///
+  /// On web, [XFile.path] is a blob URL that can be used directly.
+  /// On native platforms, [XFile.path] is a file system path.
+  ImageProvider _resolveImageProvider(XFile file) {
+    if (kIsWeb) {
+      // On web, the path is a blob URL that NetworkImage can load
+      return NetworkImage(file.path);
+    }
+    // On native, use FileImage for local file system access
+    return FileImage(io.File(file.path));
+  }
+
+  Future<void> _pickImage(CreateListingViewModel viewModel) async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 85,
+    );
+    if (pickedFile != null) {
+      // Use the XFile directly (works on all platforms including web)
+      viewModel.setImageFile(pickedFile, pickedFile.path);
+    }
   }
 }

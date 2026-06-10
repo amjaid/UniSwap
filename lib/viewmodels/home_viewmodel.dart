@@ -2,10 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uniswap/models/listing.dart';
 import 'package:uniswap/repositories/listing_repository.dart';
-
-final listingRepositoryProvider = Provider<ListingRepository>((ref) {
-  return ListingRepository();
-});
+import 'package:uniswap/services/providers.dart';
 
 final homeViewModelProvider = StateNotifierProvider<HomeViewModel, HomeState>((ref) {
   return HomeViewModel(ref.read(listingRepositoryProvider));
@@ -95,6 +92,7 @@ class HomeViewModel extends StateNotifier<HomeState> {
 
   Future<void> refresh() async {
     state = state.copyWith(isLoading: true);
+    await _repository.refresh();
     await _load();
   }
 

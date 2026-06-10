@@ -99,6 +99,54 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=False, methods=['post'], url_path='upload_avatar')
+    def upload_avatar(self, request):
+        """
+        Upload a profile picture for the current user.
+
+        Accepts a multipart form with an 'avatar' file field.
+        Saves the file to the user's avatar ImageField and returns the URL.
+        """
+        user = request.user
+
+        if 'avatar' not in request.FILES:
+            return Response(
+                {'error': 'No image file provided. Use field name "avatar".'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        file = request.FILES['avatar']
+
+        # Validate file type
+        import os
+        ext = os.path.splitext(file.name)[1].lower()
+        allowed_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
+        if ext not in allowed_extensions:
+            return Response(
+                {'error': f'Unsupported file type "{ext}". Allowed: {", ".join(allowed_extensions)}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validate file size (10MB max)
+        if file.size > 10 * 1024 * 1024:
+            return Response(
+                {'error': 'File too large. Maximum size is 10MB.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Save the file to the avatar ImageField
+        user.avatar.save(file.name, file, save=True)
+
+        # Build the full URL and also update avatar_url field
+        avatar_url = request.build_absolute_uri(user.avatar.url)
+        user.avatar_url = avatar_url
+        user.save(update_fields=['avatar_url'])
+
+        return Response({
+            'avatar_url': avatar_url,
+            'message': 'Avatar uploaded successfully.',
+        })
+
     @action(detail=True, methods=['get'])
     def ratings(self, request, pk=None):
         """

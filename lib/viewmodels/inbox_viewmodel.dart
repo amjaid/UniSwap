@@ -8,7 +8,7 @@ import 'package:uniswap/services/providers.dart';
 import 'package:uniswap/viewmodels/auth_viewmodel.dart';
 
 final inboxViewModelProvider = StateNotifierProvider<InboxViewModel, InboxState>((ref) {
-  final user = ref.watch(authStateProvider).valueOrNull;
+  final user = ref.watch(authStateProvider);
   final viewModel = InboxViewModel(ref.read(chatServiceProvider), user?['id']?.toString());
   return viewModel;
 });
@@ -80,29 +80,19 @@ class InboxViewModel extends StateNotifier<InboxState> {
       final response = await _chatService.fetchChats();
       if (response.isSuccess && response.data != null) {
         final chatsList = response.data!['results'] as List<dynamic>? ?? [];
-        final threads = chatsList.map((chat) {
-          final chatMap = chat as Map<String, dynamic>;
-          final participants = (chatMap['participants'] as List<dynamic>?)
-                  ?.map((p) => p.toString())
-                  .toList() ??
-              [];
-          final otherUserName = participants
-              .where((p) => p != _userId)
-              .firstOrNull;
-          return ConversationThread(
-            id: chatMap['id']?.toString() ?? '',
-            swapId: chatMap['id']?.toString() ?? '',
-            contactName: otherUserName ?? 'User',
-            contactAvatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e',
-            isVerified: false,
-            lastMessage: chatMap['last_message'] as String? ?? 'Start chatting',
-            lastTimestamp: DateTime.tryParse(chatMap['updated_at'] as String? ?? '') ?? DateTime.now(),
-            unreadCount: chatMap['unread_count'] as int? ?? 0,
-            role: ThreadCategory.all,
+        final currentUserId = int.tryParse(_userId) ?? 0;
+
+        // Parse all chats into ConversationThread objects
+        final allThreads = chatsList.map((chat) {
+          return ConversationThread.fromJson(
+            chat as Map<String, dynamic>,
+            currentUserId: currentUserId,
           );
         }).toList();
 
-        threads.sort((a, b) => b.lastTimestamp.compareTo(a.lastTimestamp));
+        // Deduplicate: keep only the most recent chat per contact
+        final threads = ConversationThread.deduplicateByContact(allThreads);
+
         state = state.copyWith(isLoading: false, threads: threads, errorMessage: null);
       }
     } catch (_) {

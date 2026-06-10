@@ -1,13 +1,13 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uniswap/config/theme.dart';
+import 'package:uniswap/models/listing.dart';
+import 'package:uniswap/services/api_client.dart';
 import 'package:uniswap/services/django_auth_service.dart';
-import 'package:uniswap/services/django_storage_service.dart';
 import 'package:uniswap/services/providers.dart';
+import 'package:uniswap/utils/image_utils.dart';
 import 'package:uniswap/viewmodels/auth_viewmodel.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -19,14 +19,40 @@ class ProfileScreen extends ConsumerStatefulWidget {
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _promptedForUsername = false;
+  List<Listing> _userListings = [];
+  bool _listingsLoaded = false;
+
+  /// Resolve an avatar URL, prepending the base URL if it's a relative path.
+  ///
+  /// The Django backend may return a relative URL like `/media/avatars/foo.jpg`
+  /// instead of a full URL. This method ensures the URL is absolute so that
+  /// `NetworkImage` can load it correctly.
+  String _resolveAvatarUrl(String url) {
+    if (url.isEmpty) return '';
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    // Prepend the API base URL (strip the /api suffix)
+    final base = ApiClient.defaultBaseUrl;
+    final baseUrl = base.endsWith('/api') ? base.substring(0, base.length - 4) : base;
+    return '$baseUrl${url.startsWith('/') ? url : '/$url'}';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authStateProvider);
     final authService = ref.read(djangoAuthServiceProvider);
-    final storageService = ref.read(djangoStorageServiceProvider);
-    final user = authState.valueOrNull;
+    final listingRepo = ref.read(listingRepositoryProvider);
+    final user = ref.watch(authStateProvider);
     final userId = user?['id']?.toString();
+
+    // Fetch user's listings once
+    if (!_listingsLoaded) {
+      _listingsLoaded = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final all = listingRepo.getAll();
+        setState(() => _userListings = all);
+      });
+    }
 
     if (user != null && !_promptedForUsername) {
       final name = (user['name'] as String?)?.trim();
@@ -40,7 +66,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     final fullName = (user?['name'] as String?)?.trim();
     final username = (user?['username'] as String?)?.trim() ?? (user?['name'] as String?);
-    final photoUrl = (user?['avatar_url'] as String?)?.trim();
+    final rawPhotoUrl = (user?['avatar_url'] as String?)?.trim() ?? '';
+    final photoUrl = _resolveAvatarUrl(rawPhotoUrl);
+    final email = (user?['email'] as String?)?.trim();
+
+    // Compute stats from user's listings
+    final activeCount = _userListings.length;
+    final soldCount = 0; // Backend doesn't expose this yet; placeholder
 
     return Scaffold(
       appBar: AppBar(
@@ -59,10 +91,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   CircleAvatar(
                     radius: 44,
                     backgroundColor: Colors.grey.withAlpha(30),
-                    backgroundImage: photoUrl == null || photoUrl.isEmpty
+                    backgroundImage: photoUrl.isEmpty
                         ? null
                         : NetworkImage(photoUrl) as ImageProvider,
-                    child: photoUrl == null || photoUrl.isEmpty
+                    child: photoUrl.isEmpty
                         ? const Icon(Icons.person, size: 40, color: Colors.grey)
                         : null,
                   ),
@@ -74,8 +106,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           ? null
                           : () => _changeProfilePhoto(
                                 context,
-                                userId,
-                                storageService,
                                 authService,
                               ),
                       child: Container(
@@ -122,16 +152,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 4),
-              Text(user?['email'] as String? ?? 'utm@utm.my', style: Theme.of(context).textTheme.bodySmall),
+              Text(email ?? 'utm@utm.my', style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: const [
                   Icon(Icons.star, size: 16, color: Colors.amber),
                   SizedBox(width: 4),
-                  Text('4.9'),
+                  Text('--'),
                   SizedBox(width: 6),
-                  Text('(12 reviews)'),
+                  Text('(no ratings yet)'),
                 ],
               ),
             ],
@@ -139,10 +169,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           const SizedBox(height: 18),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              _StatCard(label: 'Sold', value: '24'),
-              _StatCard(label: 'Swapped', value: '8'),
-              _StatCard(label: 'Active', value: '3'),
+            children: [
+              _StatCard(label: 'Listings', value: activeCount.toString()),
+              _StatCard(label: 'Sold', value: soldCount.toString()),
+              _StatCard(label: 'Active', value: activeCount.toString()),
             ],
           ),
           const SizedBox(height: 18),
@@ -159,13 +189,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     Tab(text: 'Reviews'),
                   ],
                 ),
-                const SizedBox(
+                SizedBox(
                   height: 260,
                   child: TabBarView(
                     children: [
-                      _ProfileListingsGrid(),
-                      Center(child: Text('No sold items yet.')),
-                      Center(child: Text('No reviews yet.')),
+                      _ProfileListingsGrid(listings: _userListings),
+                      const Center(child: Text('No sold items yet.')),
+                      const Center(child: Text('No reviews yet.')),
                     ],
                   ),
                 ),
@@ -292,8 +322,6 @@ Future<void> _showEditUsernameDialog(
 
 Future<void> _changeProfilePhoto(
   BuildContext context,
-  String userId,
-  DjangoStorageService storageService,
   DjangoAuthService authService,
 ) async {
   final picker = ImagePicker();
@@ -307,22 +335,23 @@ Future<void> _changeProfilePhoto(
 
     if (image == null) return;
 
-    final file = File(image.path);
-    final response = await storageService.uploadAvatar(file: file);
+    // Send the avatar file directly as a multipart PATCH to /users/me/
+    // The backend UserDetailSerializer handles saving to the avatar ImageField
+    // and updating avatar_url accordingly.
+    final response = await authService.updateProfile(avatarFile: image);
 
-    if (response.isSuccess && response.data != null) {
-      final url = response.data!['avatar_url'] as String? ??
-          response.data!['url'] as String? ??
-          '';
-      if (url.isNotEmpty) {
-        await authService.updateProfile(avatarUrl: url);
+    if (response.isSuccess) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile photo updated.')),
+        );
       }
-    }
-
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile photo updated.')),
-      );
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(response.error ?? 'Could not update profile photo.')),
+        );
+      }
     }
   } catch (_) {
     if (context.mounted) {
@@ -473,35 +502,55 @@ class _ActionTile extends StatelessWidget {
 }
 
 class _ProfileListingsGrid extends StatelessWidget {
-  const _ProfileListingsGrid();
+  const _ProfileListingsGrid({required this.listings});
+
+  final List<Listing> listings;
 
   @override
   Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2,
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      childAspectRatio: 0.6,
+    if (listings.isEmpty) {
+      return const Center(child: Text('No listings yet.'));
+    }
+
+    return GridView.builder(
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 0.6,
+      ),
       padding: const EdgeInsets.only(top: 12),
-      children: const [
-        _MiniListingCard(title: 'Calculus Textbook', price: 'RM 45', tag: 'Good'),
-        _MiniListingCard(title: 'Vintage Denim Jacket', price: 'RM 55', tag: 'Swap'),
-        _MiniListingCard(title: 'Desk Lamp', price: 'RM 20', tag: 'Good'),
-        _MiniListingCard(title: 'Headphones', price: 'RM 120', tag: 'Swap'),
-      ],
+      itemCount: listings.length,
+      itemBuilder: (context, index) {
+        final listing = listings[index];
+        return _MiniListingCard(
+          title: listing.title,
+          price: listing.price,
+          tag: listing.condition,
+          listing: listing,
+        );
+      },
     );
   }
 }
 
-class _MiniListingCard extends StatelessWidget {
-  const _MiniListingCard({required this.title, required this.price, required this.tag});
+class _MiniListingCard extends ConsumerWidget {
+  const _MiniListingCard({
+    required this.title,
+    required this.price,
+    required this.tag,
+    this.listing,
+  });
 
   final String title;
   final String price;
   final String tag;
+  final Listing? listing;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final itemService = ref.read(itemServiceProvider);
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -512,12 +561,114 @@ class _MiniListingCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                color: Colors.grey.withAlpha(30),
-              ),
-              child: const Center(child: Icon(Icons.photo, color: Colors.grey)),
+            child: Stack(
+              children: [
+                // Show the listing image if available, otherwise a placeholder
+                if (listing?.imageUrl.isNotEmpty == true)
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                      image: DecorationImage(
+                        image: NetworkImage(getFullImageUrl(listing!.imageUrl)),
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                      color: Colors.grey.withAlpha(30),
+                    ),
+                    child: const Center(child: Icon(Icons.photo, color: Colors.grey)),
+                  ),
+                // Three-dot menu for edit/delete
+                if (listing != null)
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: PopupMenuButton<String>(
+                      icon: Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.black38,
+                          shape: BoxShape.circle,
+                        ),
+                        padding: const EdgeInsets.all(2),
+                        child: const Icon(Icons.more_vert, size: 18, color: Colors.white),
+                      ),
+                      onSelected: (value) async {
+                        if (value == 'edit') {
+                          if (context.mounted) {
+                            await context.push<Listing>(
+                              '/listing/${listing!.id}/edit',
+                              extra: listing,
+                            );
+                          }
+                        } else if (value == 'delete') {
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Delete listing'),
+                              content: const Text(
+                                'Are you sure you want to delete this listing? '
+                                'This action cannot be undone.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(context).pop(false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.of(context).pop(true),
+                                  style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                                  child: const Text('Delete'),
+                                ),
+                              ],
+                            ),
+                          );
+
+                          if (confirmed == true) {
+                            final itemId = int.tryParse(listing!.id);
+                            if (itemId != null) {
+                              final response = await itemService.deleteItem(itemId);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      response.isSuccess
+                                          ? 'Listing deleted.'
+                                          : (response.error ?? 'Failed to delete listing.'),
+                                    ),
+                                  ),
+                                );
+                              }
+                            }
+                          }
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: ListTile(
+                            leading: Icon(Icons.edit, size: 18),
+                            title: Text('Edit', style: TextStyle(fontSize: 14)),
+                            contentPadding: EdgeInsets.zero,
+                            dense: true,
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: ListTile(
+                            leading: Icon(Icons.delete, size: 18, color: Colors.redAccent),
+                            title: Text('Delete', style: TextStyle(fontSize: 14, color: Colors.redAccent)),
+                            contentPadding: EdgeInsets.zero,
+                            dense: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ),
           ),
           Padding(

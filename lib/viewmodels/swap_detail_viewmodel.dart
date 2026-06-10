@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uniswap/models/swap.dart';
 import 'package:uniswap/repositories/swap_repository.dart';
+import 'package:uniswap/services/providers.dart';
 import 'package:uniswap/viewmodels/swap_hub_viewmodel.dart';
 
 final swapDetailViewModelProvider =
@@ -41,7 +42,8 @@ class SwapDetailState extends Equatable {
 }
 
 class SwapDetailViewModel extends StateNotifier<SwapDetailState> {
-  SwapDetailViewModel(this._repository, this._ref, this._swapId) : super(SwapDetailState.initial()) {
+  SwapDetailViewModel(this._repository, this._ref, this._swapId)
+      : super(SwapDetailState.initial()) {
     _load();
   }
 

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uniswap/config/theme.dart';
 import 'package:uniswap/models/listing.dart';
+import 'package:uniswap/utils/image_utils.dart';
 import 'package:uniswap/viewmodels/auth_viewmodel.dart';
 import 'package:uniswap/viewmodels/home_viewmodel.dart';
 
@@ -13,8 +14,7 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(homeViewModelProvider);
     final viewModel = ref.read(homeViewModelProvider.notifier);
-    final authState = ref.watch(authStateProvider);
-    final user = authState.valueOrNull;
+    final user = ref.watch(authStateProvider);
     final username = (user?['username'] as String?)?.trim();
     final fullName = (user?['name'] as String?)?.trim();
     final greetingName = username?.isNotEmpty == true
@@ -43,9 +43,17 @@ class HomeScreen extends ConsumerWidget {
                     Text('Hey, $greetingName', style: Theme.of(context).textTheme.displaySmall),
                   ],
                 ),
-                const CircleAvatar(
+                CircleAvatar(
                   radius: 22,
-                  backgroundImage: NetworkImage('https://images.unsplash.com/photo-1500648767791-00dcc994a43e'),
+                  backgroundImage: user?['avatar_url'] != null
+                      ? NetworkImage(user!['avatar_url'] as String)
+                      : null,
+                  child: user?['avatar_url'] == null
+                      ? Text(
+                          (greetingName.isNotEmpty ? greetingName[0] : 'U').toUpperCase(),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        )
+                      : null,
                 ),
               ],
             ),
@@ -182,7 +190,7 @@ class _ListingCard extends StatelessWidget {
           children: [
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              child: Image.network(listing!.imageUrl, height: 110, width: double.infinity, fit: BoxFit.cover),
+              child: Image.network(getFullImageUrl(listing!.imageUrl), height: 110, width: double.infinity, fit: BoxFit.cover),
             ),
             Padding(
               padding: const EdgeInsets.all(12),
@@ -243,7 +251,7 @@ class _ListingGridCard extends StatelessWidget {
           children: [
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              child: Image.network(listing!.imageUrl, height: 90, width: double.infinity, fit: BoxFit.cover),
+              child: Image.network(getFullImageUrl(listing!.imageUrl), height: 90, width: double.infinity, fit: BoxFit.cover),
             ),
             Padding(
               padding: const EdgeInsets.all(10),

@@ -2,10 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uniswap/models/swap.dart';
 import 'package:uniswap/repositories/swap_repository.dart';
-
-final swapRepositoryProvider = Provider<SwapRepository>((ref) {
-  return SwapRepository();
-});
+import 'package:uniswap/services/providers.dart';
 
 final swapHubViewModelProvider = StateNotifierProvider<SwapHubViewModel, SwapHubState>((ref) {
   return SwapHubViewModel(ref.read(swapRepositoryProvider));
@@ -45,13 +42,14 @@ class SwapHubViewModel extends StateNotifier<SwapHubState> {
 
   final SwapRepository _repository;
 
-  void _load() {
-    final swaps = _repository.fetchSwaps();
+  Future<void> _load() async {
+    final swaps = await _repository.fetchSwaps();
     state = state.copyWith(isLoading: false, swaps: swaps);
   }
 
-  void refresh() {
+  Future<void> refresh() async {
     state = state.copyWith(isLoading: true);
-    _load();
+    await _repository.refresh();
+    await _load();
   }
 }

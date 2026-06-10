@@ -2,17 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uniswap/config/routes.dart';
 import 'package:uniswap/config/theme.dart';
-import 'package:uniswap/services/django_notification_service.dart';
 import 'package:uniswap/services/providers.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const ProviderScope(child: UniSwapApp()));
 }
-
-final notificationServiceProvider = Provider<DjangoNotificationService>((ref) {
-  return ref.read(djangoNotificationServiceProvider);
-});
 
 class UniSwapApp extends ConsumerStatefulWidget {
   const UniSwapApp({super.key});
