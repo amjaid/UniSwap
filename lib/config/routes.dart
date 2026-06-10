@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
-import 'package:uniswap/viewmodels/auth_viewmodel.dart';
+import 'package:uniswap/services/providers.dart';
 import 'package:uniswap/views/main_shell_screen.dart';
 import 'package:uniswap/views/forgot_password_screen.dart';
 import 'package:uniswap/views/placeholder_screens.dart';
@@ -27,17 +26,19 @@ final goRouterRefreshProvider = Provider<GoRouterRefreshNotifier>((ref) {
 });
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authStateProvider);
+  final authAsync = ref.watch(authStateProvider);
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: '/',
     refreshListenable: ref.watch(goRouterRefreshProvider),
     redirect: (context, state) {
-      if (authState.isLoading) return null;
+      // Show splash while auth is loading
+      if (authAsync.isLoading) return null;
 
       final location = state.uri.path;
-      final isLoggedIn = authState.valueOrNull != null;
+      final userData = authAsync.valueOrNull;
+      final isLoggedIn = userData != null;
       final isSigningIn = location == '/sign-in' || location == '/sign-up';
 
       if (location == '/') {
@@ -173,13 +174,16 @@ bool _requiresAuth(String location) {
 
 class GoRouterRefreshNotifier extends ChangeNotifier {
   GoRouterRefreshNotifier(this.ref) {
-    _subscription = ref.listen<AsyncValue<User?>>(authStateProvider, (_, __) {
-      notifyListeners();
-    });
+    _subscription = ref.listen<AsyncValue<Map<String, dynamic>?>>(
+      authStateProvider,
+      (_, __) {
+        notifyListeners();
+      },
+    );
   }
 
   final Ref ref;
-  late final ProviderSubscription<AsyncValue<User?>> _subscription;
+  late final ProviderSubscription<AsyncValue<Map<String, dynamic>?>> _subscription;
 
   @override
   void dispose() {

@@ -1,29 +1,17 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:uniswap/config/routes.dart';
 import 'package:uniswap/config/theme.dart';
-import 'package:uniswap/firebase_options.dart';
-import 'package:uniswap/viewmodels/auth_viewmodel.dart';
-import 'package:uniswap/services/notification_service.dart';
+import 'package:uniswap/services/django_notification_service.dart';
+import 'package:uniswap/services/providers.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   runApp(const ProviderScope(child: UniSwapApp()));
 }
 
-final notificationServiceProvider = Provider<NotificationService>((ref) {
-  return NotificationService(
-    FirebaseMessaging.instance,
-    FlutterLocalNotificationsPlugin(),
-    FirebaseAuth.instance,
-    ref.read(firestoreServiceProvider),
-  );
+final notificationServiceProvider = Provider<DjangoNotificationService>((ref) {
+  return ref.read(djangoNotificationServiceProvider);
 });
 
 class UniSwapApp extends ConsumerStatefulWidget {
@@ -37,7 +25,16 @@ class _UniSwapAppState extends ConsumerState<UniSwapApp> {
   @override
   void initState() {
     super.initState();
-    ref.read(notificationServiceProvider).initialize();
+    // Start polling for notifications when app launches
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(notificationServiceProvider).startPolling();
+    });
+  }
+
+  @override
+  void dispose() {
+    ref.read(notificationServiceProvider).dispose();
+    super.dispose();
   }
 
   @override
