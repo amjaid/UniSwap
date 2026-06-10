@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:uniswap/services/providers.dart';
+import 'package:uniswap/viewmodels/auth_viewmodel.dart';
 import 'package:uniswap/views/main_shell_screen.dart';
 import 'package:uniswap/views/forgot_password_screen.dart';
 import 'package:uniswap/views/placeholder_screens.dart';
