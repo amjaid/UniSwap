@@ -1,19 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uniswap/services/api_client.dart';
 import 'package:uniswap/services/django_auth_service.dart';
-
-// ──────────────────────────────────────────────
-// Providers
-// ──────────────────────────────────────────────
-
-final apiClientProvider = Provider<ApiClient>((ref) {
-  return ApiClient();
-});
-
-final djangoAuthServiceProvider = Provider<DjangoAuthService>((ref) {
-  return DjangoAuthService(ref.read(apiClientProvider));
-});
+import 'package:uniswap/services/providers.dart';
 
 /// Auth state provider - emits the current user data or null.
 /// Uses Django JWT token to check authentication status.
@@ -293,10 +281,8 @@ class SignUpViewModel extends StateNotifier<SignUpState> {
     final password = state.password.trim();
     final fullName = state.fullName.trim();
     final username = state.username.trim();
-    final normalizedUsername = username.toLowerCase();
     final phone = state.phone.trim();
     final faculty = state.faculty.trim();
-    final campus = state.campus.trim();
 
     if (fullName.isEmpty || username.isEmpty || phone.isEmpty || faculty.isEmpty) {
       state = state.copyWith(errorMessage: 'Please complete all fields.');

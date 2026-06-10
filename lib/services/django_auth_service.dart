@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:uniswap/services/api_client.dart';
 
 /// Authentication service for Django JWT backend.

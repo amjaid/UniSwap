@@ -4,9 +4,12 @@ Serializers for the chat app.
 Handles chat conversations and messages between users.
 """
 
+from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from .models import Chat, ChatMessage
+
+User = get_user_model()
 
 
 class ChatMessageSerializer(serializers.ModelSerializer):
@@ -35,6 +38,8 @@ class ChatListSerializer(serializers.ModelSerializer):
     Lightweight serializer for chat list views.
 
     Includes last message preview and participant info.
+    For creation, accepts a list of participant IDs (the current
+    user is automatically added by perform_create in the view).
     """
     last_message = serializers.SerializerMethodField()
     participant_names = serializers.SerializerMethodField()
@@ -42,11 +47,17 @@ class ChatListSerializer(serializers.ModelSerializer):
         source='item.title', read_only=True, default=None
     )
     unread_count = serializers.SerializerMethodField()
+    participants = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=User.objects.all(),
+        write_only=True,
+        help_text='List of user IDs to add as participants (current user is added automatically)',
+    )
 
     class Meta:
         model = Chat
         fields = [
-            'id', 'participant_names', 'item', 'item_title',
+            'id', 'participants', 'participant_names', 'item', 'item_title',
             'last_message', 'unread_count',
             'created_at', 'updated_at',
         ]

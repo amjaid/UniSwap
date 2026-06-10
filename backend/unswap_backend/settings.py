@@ -232,7 +232,7 @@ CORS_ALLOW_HEADERS = [
 ALLOWED_UNIVERSITY_DOMAINS = [
     'university.edu',
     'student.university.edu',
-    'utm.my',          # Universiti Teknologi Malaysia
+    'utm.my',          # Universiti Teknologi Malaysia (also matches subdomains like graduate.utm.my)
     'student.utm.my',  # UTM student email
     'um.edu.my',       # Universiti Malaya
     'ukm.edu.my',      # Universiti Kebangsaan Malaysia

@@ -45,12 +45,23 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
 
     def validate_email(self, value):
-        """Validate that the email domain is an allowed university domain."""
+        """Validate that the email domain is an allowed university domain.
+
+        Uses suffix matching so that any subdomain of an allowed domain
+        is accepted (e.g., 'graduate.utm.my' matches 'utm.my').
+        """
         email = value.lower().strip()
         domain = email.split('@')[-1]
 
         allowed_domains = getattr(settings, 'ALLOWED_UNIVERSITY_DOMAINS', [])
-        if domain not in allowed_domains:
+
+        # Check if the domain exactly matches or is a subdomain of an allowed domain
+        is_allowed = any(
+            domain == allowed or domain.endswith(f'.{allowed}')
+            for allowed in allowed_domains
+        )
+
+        if not is_allowed:
             raise serializers.ValidationError(
                 f'Email domain "{domain}" is not recognized. '
                 f'Please use your university email address.'

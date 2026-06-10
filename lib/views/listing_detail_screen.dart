@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:uniswap/services/chat_service.dart';
 import 'package:uniswap/services/providers.dart';
 import 'package:uniswap/viewmodels/auth_viewmodel.dart';
 import 'package:uniswap/viewmodels/home_viewmodel.dart';
@@ -80,12 +79,22 @@ class ListingDetailScreen extends ConsumerWidget {
                             return;
                           }
 
-                          final userId = user['id'] as int? ?? 0;
-                          final otherUserId = 'seller_$listingId';
+                          // Send the seller's ID as the other participant.
+                          // The backend's perform_create automatically adds the
+                          // current user, so we only need to specify the seller.
+                          final sellerId = listing.sellerId;
+                          if (sellerId == null) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Cannot start chat: seller not found.')),
+                              );
+                            }
+                            return;
+                          }
 
                           try {
                             final response = await chatService.createChat(
-                              participantIds: [userId],
+                              participantIds: [sellerId],
                               itemId: int.tryParse(listingId),
                             );
                             if (response.isSuccess && response.data != null) {

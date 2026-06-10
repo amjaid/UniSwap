@@ -7,7 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:uniswap/config/theme.dart';
 import 'package:uniswap/services/django_auth_service.dart';
 import 'package:uniswap/services/django_storage_service.dart';
-import 'package:uniswap/services/providers.dart' hide djangoAuthServiceProvider;
+import 'package:uniswap/services/providers.dart';
 import 'package:uniswap/viewmodels/auth_viewmodel.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -330,19 +330,6 @@ Future<void> _changeProfilePhoto(
         const SnackBar(content: Text('Could not update profile photo.')),
       );
     }
-  }
-}
-
-String _contentTypeForExtension(String extension) {
-  switch (extension.toLowerCase()) {
-    case 'png':
-      return 'image/png';
-    case 'webp':
-      return 'image/webp';
-    case 'gif':
-      return 'image/gif';
-    default:
-      return 'image/jpeg';
   }
 }
 

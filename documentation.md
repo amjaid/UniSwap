@@ -112,6 +112,14 @@ backend/                 # Django project root
 |------|---------|
 | `lib/main.dart` | Removed Firebase init, uses DjangoNotificationService polling |
 | `lib/config/routes.dart` | Uses `authStateProvider` (FutureProvider) instead of Firebase StreamProvider |
+| `lib/services/providers.dart` | Central Riverpod providers for all Django services (apiClient, auth, items, transactions, chat, notifications, storage) |
+| `lib/viewmodels/auth_viewmodel.dart` | Auth state provider, sign in/up/forgot password view models with Django JWT |
+| `lib/viewmodels/chat_viewmodel.dart` | Chat state management using ChatService, polling for new messages |
+| `lib/viewmodels/inbox_viewmodel.dart` | Inbox state management using ChatService, polling for new chats |
+| `lib/views/profile_screen.dart` | Uses DjangoAuthService + DjangoStorageService, removed Firebase references |
+| `lib/views/home_screen.dart` | Uses authStateProvider with Map accessors instead of Firebase User |
+| `lib/views/listing_detail_screen.dart` | Uses ChatService for chat creation, removed FirestoreService |
+| `lib/views/chat_screen.dart` | Uses user['id'] Map accessor instead of user.uid |
 | `pubspec.yaml` | Added `http`, `shared_preferences`, `share_plus`, `tutorial_coach_mark` |
 
 ### Key Design Decisions
@@ -119,7 +127,11 @@ backend/                 # Django project root
 - **Auto-refresh**: ApiClient intercepts 401, attempts refresh, retries request
 - **Real-time**: Polling-based (5s for chat, 30s for notifications)
 - **Error handling**: Typed `ApiResponse` with success/error pattern
-- **Base URL**: `http://10.0.2.2:8000/api` (Android emulator → localhost)
+- **Base URL**: Platform-aware via `ApiClient.defaultBaseUrl`:
+  - **Web** → `http://localhost:8000/api`
+  - **Android** → `http://10.0.2.2:8000/api` (emulator loopback)
+  - **iOS/macOS** → `http://localhost:8000/api`
+  - Override via constructor parameter or `API_BASE_URL` env var
 
 ---
 
@@ -156,6 +168,7 @@ backend/                 # Django project root
 ### US-404: University Email Validation
 - `ALLOWED_UNIVERSITY_DOMAINS` in settings.py
 - `UserRegistrationSerializer.validate_email()` checks domain against allowlist
+- **Suffix matching**: any subdomain of an allowed domain is accepted (e.g., `graduate.utm.my` matches `utm.my`)
 - Domains configured: utm.my, um.edu.my, ukm.edu.my, upm.edu.my, usm.my, uim.edu.my
 - Domain auto-extracted and stored in `CustomUser.university_domain`
 
@@ -229,4 +242,4 @@ flutter run
 4. **CI/CD pipeline** with automated testing
 5. **Docker Compose** for local development
 6. **Rate limiting** refinement for production
-7. **Flutter screens** update to use new service layer (in progress)
+7. **Flutter screens** update to use new service layer ✅ COMPLETE

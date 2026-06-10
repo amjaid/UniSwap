@@ -144,7 +144,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
               ),
               if (state.isSuccess) ...[
                 const SizedBox(height: 12),
-                const Text('Check your inbox to verify your email before signing in.'),
+                const Text('Account created successfully! You can now sign in.'),
               ],
               if (state.errorMessage != null) ...[
                 const SizedBox(height: 12),

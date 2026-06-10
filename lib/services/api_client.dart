@@ -8,14 +8,36 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Central HTTP client for all API calls to the Django backend.
 ///
 /// Features:
-/// - Base URL configuration
+/// - Platform-aware base URL (web → localhost, Android → 10.0.2.2, iOS → localhost)
 /// - JWT token storage and automatic refresh
 /// - Error handling with typed exceptions
 /// - Request/response logging in debug mode
+///
+/// The base URL can be overridden via the [baseUrl] parameter or by setting
+/// the `API_BASE_URL` environment variable in a `.env` file (requires flutter_dotenv).
 class ApiClient {
   ApiClient({http.Client? httpClient, String? baseUrl})
       : _httpClient = httpClient ?? http.Client(),
-        _baseUrl = baseUrl ?? 'http://10.0.2.2:8000/api';
+        _baseUrl = baseUrl ?? ApiClient.defaultBaseUrl;
+
+  /// Returns the platform-appropriate default API base URL.
+  ///
+  /// - **Web** → `http://localhost:8000/api`
+  /// - **Android** → `http://10.0.2.2:8000/api` (emulator loopback to host)
+  /// - **iOS/macOS** → `http://localhost:8000/api`
+  ///
+  /// Override by passing a custom [baseUrl] to the constructor or by
+  /// setting `API_BASE_URL` in a `.env` file.
+  static String get defaultBaseUrl {
+    if (kIsWeb) {
+      // Web browsers run on the host machine, so localhost works directly.
+      return 'http://localhost:8000/api';
+    }
+    // Android emulator uses 10.0.2.2 to reach the host machine.
+    // iOS simulator and desktop use localhost.
+    // Physical devices would need the host machine's LAN IP.
+    return 'http://10.0.2.2:8000/api';
+  }
 
   final http.Client _httpClient;
   final String _baseUrl;
