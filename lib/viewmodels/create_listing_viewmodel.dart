@@ -117,9 +117,9 @@ class CreateListingViewModel extends StateNotifier<CreateListingState> {
 
     try {
       final user = _ref.read(authStateProvider).valueOrNull;
-      final sellerName = user?.displayName?.trim().isNotEmpty == true
-          ? user!.displayName!.trim()
-          : (user?.email ?? 'UTM Student');
+      final sellerName = (user?['name'] as String?)?.trim().isNotEmpty == true
+          ? (user!['name'] as String).trim()
+          : ((user?['email'] as String?) ?? 'UTM Student');
       final imageUrl = state.images.isNotEmpty
           ? state.images.first
           : 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f';

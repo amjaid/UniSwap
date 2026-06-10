@@ -1,11 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uniswap/config/theme.dart';
-import 'package:uniswap/services/auth_service.dart';
-import 'package:uniswap/services/firestore_service.dart';
-import 'package:uniswap/services/storage_service.dart';
+import 'package:uniswap/services/django_auth_service.dart';
+import 'package:uniswap/services/django_storage_service.dart';
+import 'package:uniswap/services/providers.dart' hide djangoAuthServiceProvider;
 import 'package:uniswap/viewmodels/auth_viewmodel.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -21,32 +23,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
-    final authService = ref.read(authServiceProvider);
-    final firestoreService = ref.read(firestoreServiceProvider);
-    final storageService = ref.read(storageServiceProvider);
+    final authService = ref.read(djangoAuthServiceProvider);
+    final storageService = ref.read(djangoStorageServiceProvider);
     final user = authState.valueOrNull;
-    final profileAsync = user == null ? null : ref.watch(userProfileProvider(user.uid));
+    final userId = user?['id']?.toString();
 
-    if (user != null && profileAsync?.valueOrNull != null && !_promptedForUsername) {
-      final profile = profileAsync!.valueOrNull ?? {};
-      final username = (profile['username'] as String?)?.trim();
-      if (username == null || username.isEmpty) {
+    if (user != null && !_promptedForUsername) {
+      final name = (user['name'] as String?)?.trim();
+      if (name == null || name.isEmpty) {
         _promptedForUsername = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          _showSetUsernameDialog(
-            context,
-            user.uid,
-            authService,
-            firestoreService,
-          );
+          _showSetUsernameDialog(context, userId ?? '', authService);
         });
       }
     }
 
-    final profileData = profileAsync?.valueOrNull ?? {};
-    final fullName = (profileData['full_name'] as String?)?.trim();
-    final username = (profileData['username'] as String?)?.trim() ?? user?.displayName;
-    final photoUrl = (profileData['photo_url'] as String?)?.trim();
+    final fullName = (user?['name'] as String?)?.trim();
+    final username = (user?['username'] as String?)?.trim() ?? (user?['name'] as String?);
+    final photoUrl = (user?['avatar_url'] as String?)?.trim();
 
     return Scaffold(
       appBar: AppBar(
@@ -76,13 +70,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     right: 0,
                     bottom: 0,
                     child: InkWell(
-                      onTap: user == null
+                      onTap: userId == null
                           ? null
                           : () => _changeProfilePhoto(
                                 context,
-                                user.uid,
+                                userId,
                                 storageService,
-                                firestoreService,
+                                authService,
                               ),
                       child: Container(
                         padding: const EdgeInsets.all(6),
@@ -111,14 +105,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   const SizedBox(width: 8),
                   IconButton(
                     icon: const Icon(Icons.edit, size: 18),
-                    onPressed: user == null
+                    onPressed: userId == null
                         ? null
                         : () => _showEditUsernameDialog(
                               context,
                               username ?? '',
-                              user.uid,
+                              userId,
                               authService,
-                              firestoreService,
                             ),
                   ),
                 ],
@@ -129,7 +122,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 4),
-              Text(user?.email ?? 'utm@utm.my', style: Theme.of(context).textTheme.bodySmall),
+              Text(user?['email'] as String? ?? 'utm@utm.my', style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -193,7 +186,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           const SizedBox(height: 12),
           OutlinedButton(
             onPressed: () async {
-              await authService.signOut();
+              await authService.logout();
             },
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.redAccent,
@@ -211,8 +204,7 @@ Future<void> _showEditUsernameDialog(
   BuildContext context,
   String currentUsername,
   String userId,
-  AuthService authService,
-  FirestoreService firestoreService,
+  DjangoAuthService authService,
 ) async {
   final controller = TextEditingController(text: currentUsername);
 
@@ -264,24 +256,17 @@ Future<void> _showEditUsernameDialog(
                         });
 
                         try {
-                          final normalized = nextUsername.toLowerCase();
-                          if (normalized != currentUsername.toLowerCase()) {
-                            final available = await firestoreService.isUsernameAvailable(
-                              normalized,
-                              currentUserId: userId,
-                            );
-                            if (!available) {
-                              setState(() {
-                                isSaving = false;
-                                errorMessage = 'That username is already taken.';
-                              });
-                              return;
-                            }
+                          final response = await authService.updateProfile(
+                            name: nextUsername,
+                          );
+                          if (response.isSuccess) {
+                            if (context.mounted) Navigator.of(context).pop();
+                          } else {
+                            setState(() {
+                              isSaving = false;
+                              errorMessage = response.error ?? 'Could not update username.';
+                            });
                           }
-
-                          await firestoreService.updateUsername(userId: userId, username: normalized);
-                          await authService.updateDisplayName(displayName: normalized);
-                          if (context.mounted) Navigator.of(context).pop();
                         } catch (_) {
                           setState(() {
                             isSaving = false;
@@ -308,8 +293,8 @@ Future<void> _showEditUsernameDialog(
 Future<void> _changeProfilePhoto(
   BuildContext context,
   String userId,
-  StorageService storageService,
-  FirestoreService firestoreService,
+  DjangoStorageService storageService,
+  DjangoAuthService authService,
 ) async {
   final picker = ImagePicker();
 
@@ -322,19 +307,17 @@ Future<void> _changeProfilePhoto(
 
     if (image == null) return;
 
-    final bytes = await image.readAsBytes();
-    final extension = image.name.split('.').last;
-    final fileName = 'profile_${DateTime.now().millisecondsSinceEpoch}.$extension';
-    final contentType = _contentTypeForExtension(extension);
+    final file = File(image.path);
+    final response = await storageService.uploadAvatar(file: file);
 
-    final url = await storageService.uploadProfileImage(
-      userId: userId,
-      bytes: bytes,
-      fileName: fileName,
-      contentType: contentType,
-    );
-
-    await firestoreService.updateProfilePhoto(userId: userId, photoUrl: url);
+    if (response.isSuccess && response.data != null) {
+      final url = response.data!['avatar_url'] as String? ??
+          response.data!['url'] as String? ??
+          '';
+      if (url.isNotEmpty) {
+        await authService.updateProfile(avatarUrl: url);
+      }
+    }
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -366,8 +349,7 @@ String _contentTypeForExtension(String extension) {
 Future<void> _showSetUsernameDialog(
   BuildContext context,
   String userId,
-  AuthService authService,
-  FirestoreService firestoreService,
+  DjangoAuthService authService,
 ) async {
   final controller = TextEditingController();
 
@@ -418,22 +400,17 @@ Future<void> _showSetUsernameDialog(
                         });
 
                         try {
-                          final normalized = nextUsername.toLowerCase();
-                          final available = await firestoreService.isUsernameAvailable(
-                            normalized,
-                            currentUserId: userId,
+                          final response = await authService.updateProfile(
+                            name: nextUsername,
                           );
-                          if (!available) {
+                          if (response.isSuccess) {
+                            if (context.mounted) Navigator.of(context).pop();
+                          } else {
                             setState(() {
                               isSaving = false;
-                              errorMessage = 'That username is already taken.';
+                              errorMessage = response.error ?? 'Could not update username.';
                             });
-                            return;
                           }
-
-                          await firestoreService.updateUsername(userId: userId, username: normalized);
-                          await authService.updateDisplayName(displayName: normalized);
-                          if (context.mounted) Navigator.of(context).pop();
                         } catch (_) {
                           setState(() {
                             isSaving = false;

@@ -28,17 +28,6 @@ final djangoAuthServiceProvider = Provider<DjangoAuthService>((ref) {
   return DjangoAuthService(ref.read(apiClientProvider));
 });
 
-/// Auth state provider - emits the current user data or null.
-/// Uses polling to check token validity on app start.
-final authStateProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
-  final authService = ref.read(djangoAuthServiceProvider);
-  final isAuth = await authService.isAuthenticated();
-  if (isAuth) {
-    return authService.currentUser;
-  }
-  return null;
-});
-
 // ──────────────────────────────────────────────
 // Items
 // ──────────────────────────────────────────────

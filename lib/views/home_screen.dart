@@ -15,13 +15,11 @@ class HomeScreen extends ConsumerWidget {
     final viewModel = ref.read(homeViewModelProvider.notifier);
     final authState = ref.watch(authStateProvider);
     final user = authState.valueOrNull;
-    final profileAsync = user == null ? null : ref.watch(userProfileProvider(user.uid));
-    final profileData = profileAsync?.valueOrNull ?? {};
-    final username = (profileData['username'] as String?)?.trim();
-    final fullName = (profileData['full_name'] as String?)?.trim();
+    final username = (user?['username'] as String?)?.trim();
+    final fullName = (user?['name'] as String?)?.trim();
     final greetingName = username?.isNotEmpty == true
         ? username!
-        : (fullName?.isNotEmpty == true ? fullName! : (user?.displayName ?? 'there'));
+        : (fullName?.isNotEmpty == true ? fullName! : 'there');
 
     return Scaffold(
       floatingActionButton: FloatingActionButton(

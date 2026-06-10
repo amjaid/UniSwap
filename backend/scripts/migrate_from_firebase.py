@@ -27,7 +27,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-# Add project root to Python path for Django imports
+# Add backend directory to Python path for Django imports
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'unswap_backend.settings')

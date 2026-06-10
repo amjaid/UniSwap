@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:uniswap/services/chat_service.dart';
+import 'package:uniswap/services/providers.dart';
 import 'package:uniswap/viewmodels/auth_viewmodel.dart';
 import 'package:uniswap/viewmodels/home_viewmodel.dart';
 import 'package:uniswap/viewmodels/swap_hub_viewmodel.dart';
@@ -14,7 +16,7 @@ class ListingDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final repository = ref.read(listingRepositoryProvider);
     final swapRepository = ref.read(swapRepositoryProvider);
-    final firestoreService = ref.read(firestoreServiceProvider);
+    final chatService = ref.read(chatServiceProvider);
     final user = ref.watch(authStateProvider).valueOrNull;
     final listing = repository.getById(listingId);
 
@@ -78,27 +80,30 @@ class ListingDetailScreen extends ConsumerWidget {
                             return;
                           }
 
-                          final conversationId = 'listing_$listingId';
+                          final userId = user['id'] as int? ?? 0;
                           final otherUserId = 'seller_$listingId';
-                          final otherUserName = listing.sellerName;
-                          String id = conversationId;
 
                           try {
-                            id = await firestoreService.ensureListingConversation(
-                              conversationId: conversationId,
-                              userId: user.uid,
-                              otherUserId: otherUserId,
-                              otherUserName: otherUserName,
+                            final response = await chatService.createChat(
+                              participantIds: [userId],
+                              itemId: int.tryParse(listingId),
                             );
+                            if (response.isSuccess && response.data != null) {
+                              final chatId = response.data!['id']?.toString() ?? listingId;
+                              if (context.mounted) {
+                                context.pushNamed(
+                                  'chat',
+                                  pathParameters: {'swapId': chatId},
+                                );
+                              }
+                            }
                           } catch (_) {
-                            id = conversationId;
-                          }
-
-                          if (context.mounted) {
-                            context.pushNamed(
-                              'chat',
-                              pathParameters: {'swapId': id},
-                            );
+                            if (context.mounted) {
+                              context.pushNamed(
+                                'chat',
+                                pathParameters: {'swapId': listingId},
+                              );
+                            }
                           }
                         },
                   child: const Text('Chat'),

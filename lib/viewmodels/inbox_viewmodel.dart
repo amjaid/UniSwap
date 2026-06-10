@@ -3,12 +3,13 @@ import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uniswap/models/conversation_thread.dart';
-import 'package:uniswap/services/firestore_service.dart';
+import 'package:uniswap/services/chat_service.dart';
+import 'package:uniswap/services/providers.dart';
 import 'package:uniswap/viewmodels/auth_viewmodel.dart';
 
 final inboxViewModelProvider = StateNotifierProvider<InboxViewModel, InboxState>((ref) {
   final user = ref.watch(authStateProvider).valueOrNull;
-  final viewModel = InboxViewModel(ref.read(firestoreServiceProvider), user?.uid);
+  final viewModel = InboxViewModel(ref.read(chatServiceProvider), user?['id']?.toString());
   return viewModel;
 });
 
@@ -53,28 +54,60 @@ class InboxState extends Equatable {
 }
 
 class InboxViewModel extends StateNotifier<InboxState> {
-  InboxViewModel(this._firestoreService, this._userId) : super(InboxState.initial()) {
-    _subscribe();
+  InboxViewModel(this._chatService, this._userId) : super(InboxState.initial()) {
+    _loadChats();
   }
 
-  final FirestoreService _firestoreService;
+  final ChatService _chatService;
   final String? _userId;
-  StreamSubscription<List<ConversationThread>>? _subscription;
+  Timer? _pollTimer;
 
-  void _subscribe() {
+  void _loadChats() {
+    _fetchChats();
+    // Poll for new chats every 10 seconds
+    _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _fetchChats();
+    });
+  }
+
+  Future<void> _fetchChats() async {
     if (_userId == null) {
       state = state.copyWith(isLoading: false, threads: []);
       return;
     }
 
-    _subscription = _firestoreService.streamThreads(_userId).listen(
-      (threads) {
+    try {
+      final response = await _chatService.fetchChats();
+      if (response.isSuccess && response.data != null) {
+        final chatsList = response.data!['results'] as List<dynamic>? ?? [];
+        final threads = chatsList.map((chat) {
+          final chatMap = chat as Map<String, dynamic>;
+          final participants = (chatMap['participants'] as List<dynamic>?)
+                  ?.map((p) => p.toString())
+                  .toList() ??
+              [];
+          final otherUserName = participants
+              .where((p) => p != _userId)
+              .firstOrNull;
+          return ConversationThread(
+            id: chatMap['id']?.toString() ?? '',
+            swapId: chatMap['id']?.toString() ?? '',
+            contactName: otherUserName ?? 'User',
+            contactAvatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e',
+            isVerified: false,
+            lastMessage: chatMap['last_message'] as String? ?? 'Start chatting',
+            lastTimestamp: DateTime.tryParse(chatMap['updated_at'] as String? ?? '') ?? DateTime.now(),
+            unreadCount: chatMap['unread_count'] as int? ?? 0,
+            role: ThreadCategory.all,
+          );
+        }).toList();
+
+        threads.sort((a, b) => b.lastTimestamp.compareTo(a.lastTimestamp));
         state = state.copyWith(isLoading: false, threads: threads, errorMessage: null);
-      },
-      onError: (_) {
-        state = state.copyWith(isLoading: false, errorMessage: 'Failed to load conversations.');
-      },
-    );
+      }
+    } catch (_) {
+      state = state.copyWith(isLoading: false, errorMessage: 'Failed to load conversations.');
+    }
   }
 
   void setFilter(ThreadCategory filter) {
@@ -90,7 +123,7 @@ class InboxViewModel extends StateNotifier<InboxState> {
 
   @override
   void dispose() {
-    _subscription?.cancel();
+    _pollTimer?.cancel();
     super.dispose();
   }
 }

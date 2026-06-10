@@ -16,18 +16,25 @@ UniSwap is a university marketplace app being migrated from Firebase to Django R
 
 ### Django Project Structure
 ```
-unswap_backend/          # Django project root
-├── settings.py          # DRF, JWT, CORS, email validation config
-├── urls.py              # Main URL routing (/api/ prefix)
-├── views.py             # AdminStatsView (US-401)
-├── wsgi.py / asgi.py
-├── tests/
-│   └── test_api.py      # 647 lines of integration tests
+backend/                 # Django project root
+├── manage.py            # Django management script
+├── requirements.txt     # Python dependencies
+├── .gitignore           # Backend-specific ignores
+├── README.md            # Backend documentation
+├── unswap_backend/      # Project configuration
+│   ├── settings.py      # DRF, JWT, CORS, email validation config
+│   ├── urls.py          # Main URL routing (/api/ prefix)
+│   ├── views.py         # AdminStatsView (US-401)
+│   ├── wsgi.py / asgi.py
+│   └── tests/
+│       └── test_api.py  # 647 lines of integration tests
 ├── users/               # CustomUser, UserProfile, UserSettings
 ├── items/               # Item, Category, WishlistItem
 ├── transactions/        # Transaction, Review
 ├── chat/                # Chat, ChatMessage
-└── notifications/       # Notification + signal handlers
+├── notifications/       # Notification + signal handlers
+└── scripts/
+    └── migrate_from_firebase.py  # Firestore → Django migration
 ```
 
 ### Django Apps Created
@@ -182,7 +189,7 @@ unswap_backend/          # Django project root
 
 ### Backend (Django)
 ```bash
-cd unswap_backend
+cd backend
 pip install -r requirements.txt
 python manage.py migrate
 python manage.py createsuperuser
@@ -191,6 +198,7 @@ python manage.py runserver 0.0.0.0:8000
 
 ### Run Tests
 ```bash
+cd backend
 python manage.py test
 # Or with coverage:
 pip install coverage

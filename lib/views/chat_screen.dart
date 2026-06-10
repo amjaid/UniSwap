@@ -69,7 +69,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       final message = state.messages[index];
                       return _MessageBubble(
                         message: message,
-                        isMine: message.isMine(user?.uid),
+                        isMine: message.isMine(user?['id']?.toString()),
                       );
                     },
                   ),
