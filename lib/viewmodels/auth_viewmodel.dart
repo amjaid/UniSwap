@@ -1,54 +1,82 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uniswap/services/auth_service.dart';
-import 'package:uniswap/services/firestore_service.dart';
-import 'package:uniswap/services/storage_service.dart';
+import 'package:uniswap/services/django_auth_service.dart';
+import 'package:uniswap/services/providers.dart';
 
-final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
-  return FirebaseAuth.instance;
+/// Auth state provider — emits the current user data or null.
+///
+/// Unlike a FutureProvider (which re-evaluates on every dependency change),
+/// this is a StateProvider that only fetches from the API:
+/// 1. On first access (app startup)
+/// 2. After explicit login (via SignInViewModel)
+/// 3. After explicit registration (via SignUpViewModel)
+/// 4. After profile update (via DjangoAuthService.updateProfile)
+/// 5. After logout
+///
+/// This prevents excessive GET /api/users/me/ calls that cause rate limiting.
+final authStateProvider = StateProvider<Map<String, dynamic>?>((ref) {
+  // Initial value is null — the AuthGuard in routes.dart will trigger
+  // a one-time fetch via ref.read(authServiceProvider).fetchCurrentUser()
+  // on app startup.
+  return null;
 });
 
-final firebaseFirestoreProvider = Provider<FirebaseFirestore>((ref) {
-  return FirebaseFirestore.instance;
+/// Initialize auth state by checking stored tokens and fetching user profile.
+///
+/// Call this once on app startup (e.g., in main.dart or a splash screen).
+/// Returns the current user data, or null if not authenticated.
+///
+/// Accepts [WidgetRef] (from ConsumerWidget/ConsumerStatefulWidget) or [Ref]
+/// (from Riverpod providers). Both have `.read()` so this works universally.
+Future<Map<String, dynamic>?> initializeAuthState(WidgetRef ref) async {
+  final authService = ref.read(djangoAuthServiceProvider);
+  final isAuth = await authService.isAuthenticated();
+  if (isAuth) {
+    final user = authService.currentUser;
+    ref.read(authStateProvider.notifier).state = user;
+    return user;
+  }
+  ref.read(authStateProvider.notifier).state = null;
+  return null;
+}
+
+/// Refresh auth state by re-fetching the current user profile.
+///
+/// Call this after login, registration, or profile updates.
+Future<void> refreshAuthState(Ref ref) async {
+  final authService = ref.read(djangoAuthServiceProvider);
+  final response = await authService.fetchCurrentUser();
+  if (response.isSuccess && response.data != null) {
+    ref.read(authStateProvider.notifier).state = response.data;
+  }
+}
+
+/// Clear auth state (on logout or token expiry).
+///
+/// Accepts [WidgetRef] (from ConsumerWidget/ConsumerStatefulWidget) or [Ref]
+/// (from Riverpod providers). Both have `.read()` so this works universally.
+void clearAuthState(WidgetRef ref) {
+  ref.read(authStateProvider.notifier).state = null;
+}
+
+final signInViewModelProvider =
+    StateNotifierProvider<SignInViewModel, SignInState>((ref) {
+  return SignInViewModel(ref.read(djangoAuthServiceProvider), ref);
 });
 
-final firebaseStorageProvider = Provider<FirebaseStorage>((ref) {
-  return FirebaseStorage.instance;
+final signUpViewModelProvider =
+    StateNotifierProvider<SignUpViewModel, SignUpState>((ref) {
+  return SignUpViewModel(ref.read(djangoAuthServiceProvider), ref);
 });
 
-final authServiceProvider = Provider<AuthService>((ref) {
-  return AuthService(ref.read(firebaseAuthProvider));
+final forgotPasswordViewModelProvider =
+    StateNotifierProvider<ForgotPasswordViewModel, ForgotPasswordState>((ref) {
+  return ForgotPasswordViewModel(ref.read(djangoAuthServiceProvider));
 });
 
-final firestoreServiceProvider = Provider<FirestoreService>((ref) {
-  return FirestoreService(ref.read(firebaseFirestoreProvider));
-});
-
-final storageServiceProvider = Provider<StorageService>((ref) {
-  return StorageService(ref.read(firebaseStorageProvider));
-});
-
-final authStateProvider = StreamProvider<User?>((ref) {
-  return ref.read(firebaseAuthProvider).authStateChanges();
-});
-
-final signInViewModelProvider = StateNotifierProvider<SignInViewModel, SignInState>((ref) {
-  return SignInViewModel(ref.read(authServiceProvider));
-});
-
-final signUpViewModelProvider = StateNotifierProvider<SignUpViewModel, SignUpState>((ref) {
-  return SignUpViewModel(
-    ref.read(authServiceProvider),
-    ref.read(firestoreServiceProvider),
-  );
-});
-
-final forgotPasswordViewModelProvider = StateNotifierProvider<ForgotPasswordViewModel, ForgotPasswordState>((ref) {
-  return ForgotPasswordViewModel(ref.read(authServiceProvider));
-});
+// ──────────────────────────────────────────────
+// Sign In
+// ──────────────────────────────────────────────
 
 class SignInState extends Equatable {
   const SignInState({
@@ -92,17 +120,21 @@ class SignInState extends Equatable {
   }
 
   @override
-  List<Object?> get props => [email, password, isLoading, errorMessage, isPasswordVisible];
+  List<Object?> get props =>
+      [email, password, isLoading, errorMessage, isPasswordVisible];
 }
 
 class SignInViewModel extends StateNotifier<SignInState> {
-  SignInViewModel(this._authService) : super(SignInState.initial());
+  SignInViewModel(this._authService, this._ref) : super(SignInState.initial());
 
-  final AuthService _authService;
+  final DjangoAuthService _authService;
+  final Ref _ref;
 
-  void updateEmail(String email) => state = state.copyWith(email: email, errorMessage: null);
+  void updateEmail(String email) =>
+      state = state.copyWith(email: email, errorMessage: null);
 
-  void updatePassword(String password) => state = state.copyWith(password: password, errorMessage: null);
+  void updatePassword(String password) =>
+      state = state.copyWith(password: password, errorMessage: null);
 
   void togglePasswordVisibility() {
     state = state.copyWith(isPasswordVisible: !state.isPasswordVisible);
@@ -112,8 +144,9 @@ class SignInViewModel extends StateNotifier<SignInState> {
     final email = state.email.trim();
     final password = state.password.trim();
 
-    if (!_isUtmEmail(email)) {
-      state = state.copyWith(errorMessage: 'Email must contain utm.my.');
+    if (!_isUniversityEmail(email)) {
+      state = state.copyWith(
+          errorMessage: 'Please use your university email address.');
       return;
     }
 
@@ -125,31 +158,37 @@ class SignInViewModel extends StateNotifier<SignInState> {
     state = state.copyWith(isLoading: true, errorMessage: null);
 
     try {
-      final credential = await _authService.signIn(email: email, password: password);
-      final user = credential.user;
-
-      if (user != null && !user.emailVerified) {
-        await user.sendEmailVerification();
-        await _authService.signOut();
+      final response = await _authService.login(
+        email: email,
+        password: password,
+      );
+      if (response.isSuccess) {
+        // Refresh auth state with the newly fetched user profile
+        await refreshAuthState(_ref);
+        state = state.copyWith(isLoading: false);
+      } else {
         state = state.copyWith(
           isLoading: false,
-          errorMessage: 'Please verify your email. We sent you a link.',
+          errorMessage: response.error ?? 'Sign in failed.',
         );
-        return;
       }
-
-      state = state.copyWith(isLoading: false);
-    } on FirebaseAuthException catch (error) {
-      state = state.copyWith(isLoading: false, errorMessage: _authErrorMessage(error));
-    } catch (_) {
-      state = state.copyWith(isLoading: false, errorMessage: 'Sign in failed.');
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Connection error. Please try again.',
+      );
     }
   }
 }
 
+// ──────────────────────────────────────────────
+// Sign Up
+// ──────────────────────────────────────────────
+
 class SignUpState extends Equatable {
   const SignUpState({
     required this.fullName,
+    required this.username,
     required this.email,
     required this.password,
     required this.phone,
@@ -164,6 +203,7 @@ class SignUpState extends Equatable {
   });
 
   final String fullName;
+  final String username;
   final String email;
   final String password;
   final String phone;
@@ -179,6 +219,7 @@ class SignUpState extends Equatable {
   factory SignUpState.initial() {
     return const SignUpState(
       fullName: '',
+      username: '',
       email: '',
       password: '',
       phone: '',
@@ -205,6 +246,7 @@ class SignUpState extends Equatable {
 
   SignUpState copyWith({
     String? fullName,
+    String? username,
     String? email,
     String? password,
     String? phone,
@@ -219,6 +261,7 @@ class SignUpState extends Equatable {
   }) {
     return SignUpState(
       fullName: fullName ?? this.fullName,
+      username: username ?? this.username,
       email: email ?? this.email,
       password: password ?? this.password,
       phone: phone ?? this.phone,
@@ -236,6 +279,7 @@ class SignUpState extends Equatable {
   @override
   List<Object?> get props => [
         fullName,
+        username,
         email,
         password,
         phone,
@@ -251,36 +295,31 @@ class SignUpState extends Equatable {
 }
 
 class SignUpViewModel extends StateNotifier<SignUpState> {
-  SignUpViewModel(this._authService, this._firestoreService) : super(SignUpState.initial()) {
-    _loadFaculties();
-  }
+  SignUpViewModel(this._authService, this._ref) : super(SignUpState.initial());
 
-  final AuthService _authService;
-  final FirestoreService _firestoreService;
+  final DjangoAuthService _authService;
+  final Ref _ref;
 
-  Future<void> _loadFaculties() async {
-    try {
-      final faculties = await _firestoreService.fetchFaculties();
-      if (faculties.isNotEmpty) {
-        state = state.copyWith(facultiesList: faculties, isFacultiesLoading: false);
-        return;
-      }
-    } catch (_) {}
+  void updateFullName(String fullName) =>
+      state = state.copyWith(fullName: fullName, errorMessage: null);
 
-    state = state.copyWith(isFacultiesLoading: false);
-  }
+  void updateUsername(String username) =>
+      state = state.copyWith(username: username, errorMessage: null);
 
-  void updateFullName(String fullName) => state = state.copyWith(fullName: fullName, errorMessage: null);
+  void updateEmail(String email) =>
+      state = state.copyWith(email: email, errorMessage: null);
 
-  void updateEmail(String email) => state = state.copyWith(email: email, errorMessage: null);
+  void updatePassword(String password) =>
+      state = state.copyWith(password: password, errorMessage: null);
 
-  void updatePassword(String password) => state = state.copyWith(password: password, errorMessage: null);
+  void updatePhone(String phone) =>
+      state = state.copyWith(phone: phone, errorMessage: null);
 
-  void updatePhone(String phone) => state = state.copyWith(phone: phone, errorMessage: null);
+  void updateFaculty(String faculty) =>
+      state = state.copyWith(faculty: faculty, errorMessage: null);
 
-  void updateFaculty(String faculty) => state = state.copyWith(faculty: faculty, errorMessage: null);
-
-  void updateCampus(String campus) => state = state.copyWith(campus: campus, errorMessage: null);
+  void updateCampus(String campus) =>
+      state = state.copyWith(campus: campus, errorMessage: null);
 
   void togglePasswordVisibility() {
     state = state.copyWith(isPasswordVisible: !state.isPasswordVisible);
@@ -290,17 +329,24 @@ class SignUpViewModel extends StateNotifier<SignUpState> {
     final email = state.email.trim();
     final password = state.password.trim();
     final fullName = state.fullName.trim();
+    final username = state.username.trim();
     final phone = state.phone.trim();
     final faculty = state.faculty.trim();
-    final campus = state.campus.trim();
 
-    if (fullName.isEmpty || phone.isEmpty || faculty.isEmpty) {
+    if (fullName.isEmpty || username.isEmpty || phone.isEmpty || faculty.isEmpty) {
       state = state.copyWith(errorMessage: 'Please complete all fields.');
       return;
     }
 
-    if (!_isUtmEmail(email)) {
-      state = state.copyWith(errorMessage: 'Email must contain utm.my.');
+    if (!_isValidUsername(username)) {
+      state = state.copyWith(
+          errorMessage: 'Username must be 3-20 characters, letters, numbers, or _.');
+      return;
+    }
+
+    if (!_isUniversityEmail(email)) {
+      state = state.copyWith(
+          errorMessage: 'Please use your university email address.');
       return;
     }
 
@@ -312,25 +358,37 @@ class SignUpViewModel extends StateNotifier<SignUpState> {
     state = state.copyWith(isLoading: true, errorMessage: null);
 
     try {
-      final credential = await _authService.signUp(email: email, password: password);
-      await credential.user?.sendEmailVerification();
-      await _firestoreService.createUserProfile(
-        userId: credential.user!.uid,
-        fullName: fullName,
+      // DjangoAuthService.register() expects: email, name, password, passwordConfirm
+      // We map fullName -> name, and use password for both password fields
+      final response = await _authService.register(
         email: email,
-        phone: phone,
-        faculty: faculty,
-        campus: campus,
+        name: fullName,
+        password: password,
+        passwordConfirm: password,
       );
-      await _authService.signOut();
-      state = state.copyWith(isLoading: false, isSuccess: true);
-    } on FirebaseAuthException catch (error) {
-      state = state.copyWith(isLoading: false, errorMessage: _authErrorMessage(error));
-    } catch (_) {
-      state = state.copyWith(isLoading: false, errorMessage: 'Sign up failed.');
+
+      if (response.isSuccess) {
+        // Refresh auth state with the newly registered user
+        await refreshAuthState(_ref);
+        state = state.copyWith(isLoading: false, isSuccess: true);
+      } else {
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage: response.error ?? 'Registration failed.',
+        );
+      }
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Connection error. Please try again.',
+      );
     }
   }
 }
+
+// ──────────────────────────────────────────────
+// Forgot Password
+// ──────────────────────────────────────────────
 
 class ForgotPasswordState extends Equatable {
   const ForgotPasswordState({
@@ -375,55 +433,57 @@ class ForgotPasswordState extends Equatable {
 class ForgotPasswordViewModel extends StateNotifier<ForgotPasswordState> {
   ForgotPasswordViewModel(this._authService) : super(ForgotPasswordState.initial());
 
-  final AuthService _authService;
+  final DjangoAuthService _authService;
 
-  void updateEmail(String email) => state = state.copyWith(email: email, errorMessage: null);
+  void updateEmail(String email) =>
+      state = state.copyWith(email: email, errorMessage: null);
 
   Future<void> submit() async {
     final email = state.email.trim();
 
-    if (!_isUtmEmail(email)) {
-      state = state.copyWith(errorMessage: 'Email must contain utm.my.');
+    if (!_isUniversityEmail(email)) {
+      state = state.copyWith(
+          errorMessage: 'Please use your university email address.');
       return;
     }
 
     state = state.copyWith(isLoading: true, errorMessage: null, isSuccess: false);
 
     try {
-      await _authService.sendPasswordReset(email);
-      state = state.copyWith(isLoading: false, isSuccess: true);
-    } on FirebaseAuthException catch (error) {
-      state = state.copyWith(isLoading: false, errorMessage: _authErrorMessage(error));
-    } catch (_) {
-      state = state.copyWith(isLoading: false, errorMessage: 'Request failed.');
+      final response = await _authService.sendPasswordReset(email);
+      if (response.isSuccess) {
+        state = state.copyWith(isLoading: false, isSuccess: true);
+      } else {
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage: response.error ?? 'Password reset request failed.',
+        );
+      }
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Connection error. Please try again.',
+      );
     }
   }
 }
 
-bool _isUtmEmail(String email) {
-  return email.toLowerCase().contains('utm.my');
+// ──────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────
+
+bool _isUniversityEmail(String email) {
+  // Check for common university email domains
+  return email.toLowerCase().contains('utm.my') ||
+      email.toLowerCase().contains('um.edu.my') ||
+      email.toLowerCase().contains('ukm.edu.my') ||
+      email.toLowerCase().contains('upm.edu.my') ||
+      email.toLowerCase().contains('usm.my') ||
+      email.toLowerCase().contains('uim.edu.my') ||
+      email.toLowerCase().contains('.edu');
 }
 
-String _authErrorMessage(FirebaseAuthException error) {
-  switch (error.code) {
-    case 'operation-not-allowed':
-      return 'Email/password sign-in is disabled in Firebase Auth.';
-    case 'email-already-in-use':
-      return 'That email is already registered.';
-    case 'invalid-email':
-      return 'Enter a valid email address.';
-    case 'weak-password':
-      return 'Password must be at least 6 characters.';
-    case 'user-not-found':
-    case 'wrong-password':
-    case 'invalid-credential':
-      return 'Invalid email or password.';
-    case 'too-many-requests':
-      return 'Too many attempts. Try again later.';
-    default:
-      if (error.message == null) {
-        return 'Authentication failed (${error.code}).';
-      }
-      return '${error.message} (${error.code}).';
-  }
+bool _isValidUsername(String username) {
+  final trimmed = username.trim();
+  return RegExp(r'^[a-zA-Z0-9_]{3,20}$').hasMatch(trimmed);
 }

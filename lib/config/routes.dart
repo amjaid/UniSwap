@@ -1,20 +1,25 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uniswap/viewmodels/auth_viewmodel.dart';
 import 'package:uniswap/views/main_shell_screen.dart';
 import 'package:uniswap/views/forgot_password_screen.dart';
 import 'package:uniswap/views/placeholder_screens.dart';
+import 'package:uniswap/views/inbox_screen.dart';
+import 'package:uniswap/views/chat_screen.dart';
 import 'package:uniswap/views/home_screen.dart';
 import 'package:uniswap/views/explore_screen.dart';
 import 'package:uniswap/views/create_listing_screen.dart';
+import 'package:uniswap/views/edit_listing_screen.dart';
 import 'package:uniswap/views/listing_detail_screen.dart';
 import 'package:uniswap/views/profile_screen.dart';
+import 'package:uniswap/views/swap_detail_screen.dart';
+import 'package:uniswap/views/swap_hub_screen.dart';
 import 'package:uniswap/views/sign_in_screen.dart';
 import 'package:uniswap/views/sign_up_screen.dart';
 
-final _shellNavigatorKey = GlobalKey<NavigatorState>();
+final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 final goRouterRefreshProvider = Provider<GoRouterRefreshNotifier>((ref) {
   final notifier = GoRouterRefreshNotifier(ref);
@@ -23,24 +28,42 @@ final goRouterRefreshProvider = Provider<GoRouterRefreshNotifier>((ref) {
 });
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authStateProvider);
+  // authStateProvider is now a StateProvider — returns Map<String, dynamic>? directly
+  final userData = ref.watch(authStateProvider);
 
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/',
     refreshListenable: ref.watch(goRouterRefreshProvider),
     redirect: (context, state) {
-      if (authState.isLoading) return null;
-
       final location = state.uri.path;
-      final isLoggedIn = authState.valueOrNull != null;
+      final isLoggedIn = userData != null;
       final isSigningIn = location == '/sign-in' || location == '/sign-up';
 
-      if (location == '/') {
-        return isLoggedIn ? '/home' : '/sign-in';
+      if (kDebugMode) {
+        debugPrint('[GoRouter] redirect: location=$location, isLoggedIn=$isLoggedIn');
       }
 
-      if (isLoggedIn && isSigningIn) return '/home';
-      if (!isLoggedIn && _requiresAuth(location)) return '/sign-in';
+      if (location == '/') {
+        final target = isLoggedIn ? '/home' : '/sign-in';
+        if (kDebugMode) {
+          debugPrint('[GoRouter] Redirecting / -> $target');
+        }
+        return target;
+      }
+
+      if (isLoggedIn && isSigningIn) {
+        if (kDebugMode) {
+          debugPrint('[GoRouter] Logged in user on auth page, redirecting to /home');
+        }
+        return '/home';
+      }
+      if (!isLoggedIn && _requiresAuth(location)) {
+        if (kDebugMode) {
+          debugPrint('[GoRouter] Unauthenticated user on protected page, redirecting to /sign-in');
+        }
+        return '/sign-in';
+      }
       return null;
     },
     routes: [
@@ -65,7 +88,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ForgotPasswordScreen(),
       ),
       ShellRoute(
-        navigatorKey: _shellNavigatorKey,
         builder: (context, state, child) => MainShellScreen(child: child),
         routes: [
           GoRoute(
@@ -96,17 +118,17 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
       GoRoute(
-        path: '/swap-hub/:swapId',
+        path: '/swap-hub/:transactionId',
         name: 'swapDetail',
         builder: (context, state) => SwapDetailScreen(
-          swapId: state.pathParameters['swapId']!,
+          transactionId: state.pathParameters['transactionId']!,
         ),
       ),
       GoRoute(
-        path: '/chat/:swapId',
+        path: '/chat/:chatId',
         name: 'chat',
         builder: (context, state) => ChatScreen(
-          swapId: state.pathParameters['swapId']!,
+          chatId: state.pathParameters['chatId']!,
         ),
       ),
       GoRoute(
@@ -120,6 +142,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => ListingDetailScreen(
           listingId: state.pathParameters['listingId']!,
         ),
+      ),
+      GoRoute(
+        path: '/listing/:listingId/edit',
+        name: 'editListing',
+        builder: (context, state) {
+          final listing = state.extra as dynamic;
+          return EditListingScreen(listing: listing);
+        },
       ),
       GoRoute(
         path: '/saved',
@@ -169,13 +199,16 @@ bool _requiresAuth(String location) {
 
 class GoRouterRefreshNotifier extends ChangeNotifier {
   GoRouterRefreshNotifier(this.ref) {
-    _subscription = ref.listen<AsyncValue<User?>>(authStateProvider, (_, __) {
-      notifyListeners();
-    });
+    _subscription = ref.listen<Map<String, dynamic>?>(
+      authStateProvider,
+      (_, __) {
+        notifyListeners();
+      },
+    );
   }
 
   final Ref ref;
-  late final ProviderSubscription<AsyncValue<User?>> _subscription;
+  late final ProviderSubscription<Map<String, dynamic>?> _subscription;
 
   @override
   void dispose() {

@@ -12,6 +12,7 @@ class SignUpScreen extends ConsumerStatefulWidget {
 
 class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   final _fullNameController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -19,10 +20,30 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   @override
   void dispose() {
     _fullNameController.dispose();
+    _usernameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  /// Handle sign-up button press.
+  ///
+  /// Calls the viewmodel's signUp() method, then navigates to /home
+  /// on success. Navigation is done here (not in the viewmodel) to
+  /// keep the viewmodel free of UI dependencies like GoRouter.
+  Future<void> _handleSignUp(
+    BuildContext context,
+    SignUpViewModel viewModel,
+  ) async {
+    await viewModel.signUp();
+
+    // After signUp completes, check the watched state for success.
+    // Navigate to /home so the user sees the main app.
+    final state = ref.read(signUpViewModelProvider);
+    if (context.mounted && state.isSuccess) {
+      context.go('/home');
+    }
   }
 
   @override
@@ -65,6 +86,17 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                   prefixIcon: Icon(Icons.person_outline),
                 ),
                 onChanged: viewModel.updateFullName,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _usernameController,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'Username',
+                  prefixIcon: Icon(Icons.alternate_email),
+                  helperText: '3-20 characters, letters, numbers, or _.',
+                ),
+                onChanged: viewModel.updateUsername,
               ),
               const SizedBox(height: 16),
               TextField(
@@ -131,7 +163,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
               ),
               if (state.isSuccess) ...[
                 const SizedBox(height: 12),
-                const Text('Check your inbox to verify your email before signing in.'),
+                const Text('Account created successfully! You can now sign in.'),
               ],
               if (state.errorMessage != null) ...[
                 const SizedBox(height: 12),
@@ -142,7 +174,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
               ],
               const SizedBox(height: 20),
               ElevatedButton(
-                onPressed: state.isLoading ? null : () => viewModel.signUp(),
+                onPressed: state.isLoading ? null : () => _handleSignUp(context, viewModel),
                 child: state.isLoading
                     ? const SizedBox(
                         height: 20,
@@ -152,15 +184,18 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                     : const Text('Create account'),
               ),
               const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('Already have an account?'),
-                  TextButton(
-                    onPressed: () => context.go('/sign-in'),
-                    child: const Text('Sign in'),
-                  ),
-                ],
+              Center(
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  children: [
+                    const Text('Already have an account?'),
+                    TextButton(
+                      onPressed: () => context.go('/sign-in'),
+                      child: const Text('Sign in'),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

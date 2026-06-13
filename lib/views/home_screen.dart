@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uniswap/config/theme.dart';
 import 'package:uniswap/models/listing.dart';
+import 'package:uniswap/utils/image_utils.dart';
+import 'package:uniswap/viewmodels/auth_viewmodel.dart';
 import 'package:uniswap/viewmodels/home_viewmodel.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -12,9 +14,16 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(homeViewModelProvider);
     final viewModel = ref.read(homeViewModelProvider.notifier);
+    final user = ref.watch(authStateProvider);
+    final username = (user?['username'] as String?)?.trim();
+    final fullName = (user?['name'] as String?)?.trim();
+    final greetingName = username?.isNotEmpty == true
+        ? username!
+        : (fullName?.isNotEmpty == true ? fullName! : 'there');
 
     return Scaffold(
       floatingActionButton: FloatingActionButton(
+        heroTag: 'home_fab',
         onPressed: () => context.go('/create-listing'),
         backgroundColor: AppColors.primary,
         child: const Icon(Icons.add, color: Colors.white),
@@ -31,12 +40,20 @@ class HomeScreen extends ConsumerWidget {
                   children: [
                     Text('UniSwap', style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 6),
-                    Text('Hey, Siti', style: Theme.of(context).textTheme.displaySmall),
+                    Text('Hey, $greetingName', style: Theme.of(context).textTheme.displaySmall),
                   ],
                 ),
-                const CircleAvatar(
+                CircleAvatar(
                   radius: 22,
-                  backgroundImage: NetworkImage('https://images.unsplash.com/photo-1500648767791-00dcc994a43e'),
+                  backgroundImage: user?['avatar_url'] != null
+                      ? NetworkImage(user!['avatar_url'] as String)
+                      : null,
+                  child: user?['avatar_url'] == null
+                      ? Text(
+                          (greetingName.isNotEmpty ? greetingName[0] : 'U').toUpperCase(),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        )
+                      : null,
                 ),
               ],
             ),
@@ -68,7 +85,13 @@ class HomeScreen extends ConsumerWidget {
               height: 210,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
-                itemBuilder: (context, index) => _ListingCard(listing: state.featuredListings.isEmpty ? null : state.featuredListings[index]),
+                itemBuilder: (context, index) {
+                  final listing = state.featuredListings.isEmpty ? null : state.featuredListings[index];
+                  return _ListingCard(
+                    listing: listing,
+                    onTap: listing == null ? null : () => context.go('/listing/${listing.id}'),
+                  );
+                },
                 separatorBuilder: (_, __) => const SizedBox(width: 12),
                 itemCount: state.featuredListings.isEmpty ? 2 : state.featuredListings.length,
               ),
@@ -84,11 +107,14 @@ class HomeScreen extends ConsumerWidget {
                 crossAxisCount: 2,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                childAspectRatio: 0.78,
+                childAspectRatio: 0.68,
               ),
               itemBuilder: (context, index) {
                 final listing = state.nearbyListings.isEmpty ? null : state.nearbyListings[index];
-                return _ListingGridCard(listing: listing);
+                return _ListingGridCard(
+                  listing: listing,
+                  onTap: listing == null ? null : () => context.go('/listing/${listing.id}'),
+                );
               },
             ),
           ],
@@ -138,9 +164,10 @@ class _SectionHeader extends StatelessWidget {
 }
 
 class _ListingCard extends StatelessWidget {
-  const _ListingCard({required this.listing});
+  const _ListingCard({required this.listing, this.onTap});
 
   final Listing? listing;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -148,49 +175,61 @@ class _ListingCard extends StatelessWidget {
       return _LoadingCard(width: 170);
     }
 
-    return Container(
-      width: 170,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 12, offset: const Offset(0, 6))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-            child: Image.network(listing!.imageUrl, height: 110, width: double.infinity, fit: BoxFit.cover),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(listing!.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 6),
-                Text(listing!.price, style: const TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    _ConditionChip(label: listing!.condition),
-                    const SizedBox(width: 6),
-                    Text(listing!.sellerName, style: Theme.of(context).textTheme.bodySmall),
-                  ],
-                ),
-              ],
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Container(
+        width: 170,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 12, offset: const Offset(0, 6))],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              child: Image.network(getFullImageUrl(listing!.imageUrl), height: 110, width: double.infinity, fit: BoxFit.cover),
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(listing!.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 6),
+                  Text(listing!.price, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      _ConditionChip(label: listing!.condition),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          listing!.sellerName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _ListingGridCard extends StatelessWidget {
-  const _ListingGridCard({required this.listing});
+  const _ListingGridCard({required this.listing, this.onTap});
 
   final Listing? listing;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -198,33 +237,50 @@ class _ListingGridCard extends StatelessWidget {
       return const _LoadingCard(width: double.infinity);
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 12, offset: const Offset(0, 6))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-            child: Image.network(listing!.imageUrl, height: 90, width: double.infinity, fit: BoxFit.cover),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(listing!.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 4),
-                Text(listing!.price, style: const TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 4),
-                _ConditionChip(label: listing!.condition),
-              ],
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 12, offset: const Offset(0, 6))],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              child: Image.network(getFullImageUrl(listing!.imageUrl), height: 90, width: double.infinity, fit: BoxFit.cover),
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    listing!.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    listing!.price,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: _ConditionChip(label: listing!.condition),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

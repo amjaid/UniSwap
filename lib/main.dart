@@ -1,21 +1,44 @@
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uniswap/config/routes.dart';
 import 'package:uniswap/config/theme.dart';
-import 'package:uniswap/firebase_options.dart';
+import 'package:uniswap/services/providers.dart';
+import 'package:uniswap/viewmodels/auth_viewmodel.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const ProviderScope(child: UniSwapApp()));
 }
 
-class UniSwapApp extends ConsumerWidget {
+class UniSwapApp extends ConsumerStatefulWidget {
   const UniSwapApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<UniSwapApp> createState() => _UniSwapAppState();
+}
+
+class _UniSwapAppState extends ConsumerState<UniSwapApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Initialize auth state and start notification polling when app launches
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Check stored tokens and fetch user profile if authenticated.
+      // This ensures returning users are redirected to /home instead of /sign-in.
+      await initializeAuthState(ref);
+      // Start polling for notifications after auth state is resolved.
+      ref.read(notificationServiceProvider).startPolling();
+    });
+  }
+
+  @override
+  void dispose() {
+    ref.read(notificationServiceProvider).dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return MaterialApp.router(
       title: 'UniSwap',
       theme: AppTheme.light(),

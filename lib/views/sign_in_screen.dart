@@ -21,6 +21,25 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     super.dispose();
   }
 
+  /// Handle sign-in button press.
+  ///
+  /// Calls the viewmodel's signIn() method, then navigates to /home
+  /// on success. Navigation is done here (not in the viewmodel) to
+  /// keep the viewmodel free of UI dependencies like GoRouter.
+  Future<void> _handleSignIn(
+    BuildContext context,
+    SignInViewModel viewModel,
+  ) async {
+    await viewModel.signIn();
+
+    // After signIn completes, check the watched state for errors.
+    // Navigate to /home so the user sees the main app.
+    final state = ref.read(signInViewModelProvider);
+    if (context.mounted && state.errorMessage == null) {
+      context.go('/home');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(signInViewModelProvider);
@@ -94,7 +113,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               ],
               const SizedBox(height: 18),
               ElevatedButton(
-                onPressed: state.isLoading ? null : () => viewModel.signIn(),
+                onPressed: state.isLoading ? null : () => _handleSignIn(context, viewModel),
                 child: state.isLoading
                     ? const SizedBox(
                         height: 20,
