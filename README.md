@@ -103,13 +103,8 @@ See `backend/README.md` and `frontend/README.md` for detailed setup instructions
 
 ## Documentation
 
-- **Full documentation**: `documentation.md`
 - **Backend API**: `backend/README.md`
-- **Frontend setup**: `frontend/README.md`
-
-## Migration from Firebase
-
-The original app used Firebase Auth, Firestore, and Cloud Functions. The migration script at `backend/scripts/migrate_from_firebase.py` exports Firestore collections to JSON and imports them into Django ORM.
+- **Frontend setup**: `frontend/README.md`collections to JSON and imports them into Django ORM.
 
 ```bash
 cd backend
