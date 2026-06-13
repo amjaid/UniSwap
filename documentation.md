@@ -409,3 +409,68 @@ flutter run
   - `lib/views/swap_detail_screen.dart` — Already correct (no `itemId` passed)
 - **Behavior**: The same two users will always open the **same chat** (e.g., only chat ID 15, not 16, 17, etc.), regardless of which listing they click. All past messages (from any item) are visible in that single conversation.
 - **Verification**: `dart analyze lib/`: **0 errors, 0 warnings** (only 9 pre-existing `use_build_context_synchronously` hints). `python manage.py test`: **47/47 tests pass**.
+
+---
+
+## Bug 12: Auth Navigation — Returning Users Not Redirected to /home
+
+### Root Cause
+Three issues combined to prevent returning users from reaching the home screen:
+
+1. **`initializeAuthState()` was never called on app startup** — `main.dart` only started notification polling in `initState`, but never called `initializeAuthState(ref)` to check stored JWT tokens and fetch the user profile. So `authStateProvider` stayed `null` on every cold start, and the router's redirect always sent users to `/sign-in`.
+
+2. **No explicit navigation after sign-in/sign-up** — The `SignInViewModel.signIn()` and `SignUpViewModel.signUp()` methods called `refreshAuthState()` which updated `authStateProvider`, but the screens never called `context.go('/home')`. The router's `redirect` *should* catch this (since `isLoggedIn && isSigningIn` → `/home`), but the async gap between the provider update and the router re-evaluation could cause the screen to stay on the auth page.
+
+3. **`GoRouterRefreshNotifier` timing** — The `refreshListenable` mechanism notifies `GoRouter` to re-evaluate redirects, but if the provider update happens before the router is fully initialized (or during the same microtask), the redirect may not fire.
+
+### Fix Applied
+
+#### A. Call `initializeAuthState()` on app startup (`lib/main.dart`)
+- Added `await initializeAuthState(ref as Ref)` in `initState`'s `addPostFrameCallback`, **before** starting notification polling.
+- This ensures that on every cold start, the app checks for stored JWT tokens, validates them by fetching the user profile, and updates `authStateProvider` accordingly.
+- Added import: `import 'package:uniswap/viewmodels/auth_viewmodel.dart';`
+
+#### B. Explicit navigation after sign-in (`lib/views/sign_in_screen.dart`)
+- Added `_handleSignIn()` method that calls `viewModel.signIn()`, then reads the watched state via `ref.read(signInViewModelProvider)` and calls `context.go('/home')` if there's no error.
+- Changed the button's `onPressed` from `() => viewModel.signIn()` to `() => _handleSignIn(context, viewModel)`.
+
+#### C. Explicit navigation after sign-up (`lib/views/sign_up_screen.dart`)
+- Added `_handleSignUp()` method that calls `viewModel.signUp()`, then reads the watched state via `ref.read(signUpViewModelProvider)` and calls `context.go('/home')` if `state.isSuccess`.
+- Changed the button's `onPressed` from `() => viewModel.signUp()` to `() => _handleSignUp(context, viewModel)`.
+
+#### D. Debug logging in router redirect (`lib/config/routes.dart`)
+- Added `import 'package:flutter/foundation.dart';` for `kDebugMode`.
+- Added `debugPrint` statements to the `redirect` function that log the current location and auth state on every redirect evaluation.
+- This makes future debugging of navigation issues much easier.
+
+### Files Changed
+| File | Change |
+|------|--------|
+| `lib/main.dart` | Call `initializeAuthState(ref)` on startup before notification polling |
+| `lib/views/sign_in_screen.dart` | Navigate to `/home` after successful sign-in |
+| `lib/views/sign_up_screen.dart` | Navigate to `/home` after successful sign-up |
+| `lib/config/routes.dart` | Add debug logging to redirect function |
+
+### Verification
+- `dart analyze lib/`: **0 errors, 0 warnings** (only 9 pre-existing `use_build_context_synchronously` hints in `swap_detail_screen.dart`).
+- `python manage.py test`: **47/47 tests pass**.
+- Behavior: On cold start with valid tokens → splash screen briefly → `/home`. On cold start without tokens → splash screen briefly → `/sign-in`. After sign-in/sign-up → immediately navigated to `/home`.
+
+### Bug 12b: Logout Button Doesn't Redirect to /sign-in
+- **Root cause**: The logout button in `profile_screen.dart` called `authService.logout()` (which clears stored tokens) but never called `clearAuthState(ref)` to update `authStateProvider` to `null`, and never called `context.go('/sign-in')` to navigate away. The user was left on the profile screen with no auth state, and the router's redirect only fires on the next route change.
+- **Fix**: Added two lines after `authService.logout()`:
+  1. `clearAuthState(ref)` — sets `authStateProvider` to `null`, which triggers `GoRouterRefreshNotifier` to re-evaluate the redirect
+  2. `context.go('/sign-in')` — explicitly navigates to the sign-in page
+- **Files changed**: `lib/views/profile_screen.dart` — logout button `onPressed` now clears auth state and navigates to `/sign-in`
+
+### Bug 12c: Runtime TypeError — `WidgetRef` vs `Ref` Cast Fails
+- **Root cause**: `clearAuthState()` and `initializeAuthState()` were typed as `Ref` but called from `ConsumerStatefulWidget` contexts where `ref` is `WidgetRef`. The `as Ref` cast (`ref as Ref`) passes compile-time checks but fails at runtime because `WidgetRef` is not a subtype of `Ref<Object?>` in Riverpod.
+- **Fix**: Changed function signatures from `Ref` to `WidgetRef`:
+  - `initializeAuthState(WidgetRef ref)` — called from `main.dart` (ConsumerStatefulWidget)
+  - `clearAuthState(WidgetRef ref)` — called from `profile_screen.dart` (ConsumerStatefulWidget)
+  - Removed all `as Ref` casts — `WidgetRef` is now the accepted type directly
+- **Files changed**:
+  - `lib/viewmodels/auth_viewmodel.dart` — `initializeAuthState` and `clearAuthState` now accept `WidgetRef` instead of `Ref`
+  - `lib/main.dart` — removed `as Ref` cast from `initializeAuthState(ref as Ref)` → `initializeAuthState(ref)`
+  - `lib/views/profile_screen.dart` — removed `as Ref` cast from `clearAuthState(ref as Ref)` → `clearAuthState(ref)`
+- **Verification**: `dart analyze lib/`: **0 errors, 0 warnings**.

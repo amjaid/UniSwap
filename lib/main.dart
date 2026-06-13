@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uniswap/config/routes.dart';
 import 'package:uniswap/config/theme.dart';
 import 'package:uniswap/services/providers.dart';
+import 'package:uniswap/viewmodels/auth_viewmodel.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,8 +21,12 @@ class _UniSwapAppState extends ConsumerState<UniSwapApp> {
   @override
   void initState() {
     super.initState();
-    // Start polling for notifications when app launches
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Initialize auth state and start notification polling when app launches
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Check stored tokens and fetch user profile if authenticated.
+      // This ensures returning users are redirected to /home instead of /sign-in.
+      await initializeAuthState(ref);
+      // Start polling for notifications after auth state is resolved.
       ref.read(notificationServiceProvider).startPolling();
     });
   }

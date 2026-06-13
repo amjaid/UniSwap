@@ -25,7 +25,10 @@ final authStateProvider = StateProvider<Map<String, dynamic>?>((ref) {
 ///
 /// Call this once on app startup (e.g., in main.dart or a splash screen).
 /// Returns the current user data, or null if not authenticated.
-Future<Map<String, dynamic>?> initializeAuthState(Ref ref) async {
+///
+/// Accepts [WidgetRef] (from ConsumerWidget/ConsumerStatefulWidget) or [Ref]
+/// (from Riverpod providers). Both have `.read()` so this works universally.
+Future<Map<String, dynamic>?> initializeAuthState(WidgetRef ref) async {
   final authService = ref.read(djangoAuthServiceProvider);
   final isAuth = await authService.isAuthenticated();
   if (isAuth) {
@@ -49,7 +52,10 @@ Future<void> refreshAuthState(Ref ref) async {
 }
 
 /// Clear auth state (on logout or token expiry).
-void clearAuthState(Ref ref) {
+///
+/// Accepts [WidgetRef] (from ConsumerWidget/ConsumerStatefulWidget) or [Ref]
+/// (from Riverpod providers). Both have `.read()` so this works universally.
+void clearAuthState(WidgetRef ref) {
   ref.read(authStateProvider.notifier).state = null;
 }
 

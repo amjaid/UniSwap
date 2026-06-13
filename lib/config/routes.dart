@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -39,12 +40,30 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isLoggedIn = userData != null;
       final isSigningIn = location == '/sign-in' || location == '/sign-up';
 
-      if (location == '/') {
-        return isLoggedIn ? '/home' : '/sign-in';
+      if (kDebugMode) {
+        debugPrint('[GoRouter] redirect: location=$location, isLoggedIn=$isLoggedIn');
       }
 
-      if (isLoggedIn && isSigningIn) return '/home';
-      if (!isLoggedIn && _requiresAuth(location)) return '/sign-in';
+      if (location == '/') {
+        final target = isLoggedIn ? '/home' : '/sign-in';
+        if (kDebugMode) {
+          debugPrint('[GoRouter] Redirecting / -> $target');
+        }
+        return target;
+      }
+
+      if (isLoggedIn && isSigningIn) {
+        if (kDebugMode) {
+          debugPrint('[GoRouter] Logged in user on auth page, redirecting to /home');
+        }
+        return '/home';
+      }
+      if (!isLoggedIn && _requiresAuth(location)) {
+        if (kDebugMode) {
+          debugPrint('[GoRouter] Unauthenticated user on protected page, redirecting to /sign-in');
+        }
+        return '/sign-in';
+      }
       return null;
     },
     routes: [

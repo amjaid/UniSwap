@@ -217,6 +217,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           OutlinedButton(
             onPressed: () async {
               await authService.logout();
+              // Clear auth state so the router redirects to /sign-in
+              clearAuthState(ref);
+              if (context.mounted) {
+                context.go('/sign-in');
+              }
             },
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.redAccent,

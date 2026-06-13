@@ -27,6 +27,25 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
     super.dispose();
   }
 
+  /// Handle sign-up button press.
+  ///
+  /// Calls the viewmodel's signUp() method, then navigates to /home
+  /// on success. Navigation is done here (not in the viewmodel) to
+  /// keep the viewmodel free of UI dependencies like GoRouter.
+  Future<void> _handleSignUp(
+    BuildContext context,
+    SignUpViewModel viewModel,
+  ) async {
+    await viewModel.signUp();
+
+    // After signUp completes, check the watched state for success.
+    // Navigate to /home so the user sees the main app.
+    final state = ref.read(signUpViewModelProvider);
+    if (context.mounted && state.isSuccess) {
+      context.go('/home');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(signUpViewModelProvider);
@@ -155,7 +174,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
               ],
               const SizedBox(height: 20),
               ElevatedButton(
-                onPressed: state.isLoading ? null : () => viewModel.signUp(),
+                onPressed: state.isLoading ? null : () => _handleSignUp(context, viewModel),
                 child: state.isLoading
                     ? const SizedBox(
                         height: 20,
