@@ -96,7 +96,7 @@ python manage.py runserver 0.0.0.0:8000
 
 ```bash
 flutter pub get
-flutter run
+flutter run -d chrome
 ```
 
 See `backend/README.md` and `frontend/README.md` for detailed setup instructions.
