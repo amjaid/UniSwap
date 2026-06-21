@@ -85,3 +85,4 @@ migrate_working_dir/
 *.swp
 *.swo
 *~
+documentation.md
