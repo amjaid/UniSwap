@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:uniswap/screens/admin/admin_panel_screen.dart';
 import 'package:uniswap/viewmodels/auth_viewmodel.dart';
 import 'package:uniswap/views/main_shell_screen.dart';
 import 'package:uniswap/views/forgot_password_screen.dart';
@@ -64,6 +65,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         }
         return '/sign-in';
       }
+
+      // Admin route: only staff users can access
+      if (location == '/admin' && (!isLoggedIn || userData['is_staff'] != true)) {
+        if (kDebugMode) {
+          debugPrint('[GoRouter] Non-staff user trying to access /admin, redirecting to /home');
+        }
+        return '/home';
+      }
+
       return null;
     },
     routes: [
@@ -175,6 +185,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           targetType: state.pathParameters['targetType']!,
           targetId: state.pathParameters['targetId']!,
         ),
+      ),
+      GoRoute(
+        path: '/admin',
+        name: 'admin',
+        builder: (context, state) => const AdminPanelScreen(),
       ),
     ],
   );

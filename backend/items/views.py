@@ -1,14 +1,18 @@
 """
 API views for the items app.
 
-Handles item listing CRUD, wishlist management, and category browsing.
+Handles item listing CRUD, wishlist management, category browsing,
+and admin-only item management endpoints.
 """
 
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters, status, viewsets
+from rest_framework import filters, generics, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import (
     AllowAny,
+    IsAdminUser,
     IsAuthenticated,
     IsAuthenticatedOrReadOnly,
 )
@@ -22,6 +26,51 @@ from .serializers import (
     ItemListSerializer,
     WishlistItemSerializer,
 )
+
+
+# ──────────────────────────────────────────────
+# Admin Views (is_staff only)
+# ──────────────────────────────────────────────
+
+class AdminItemPagination(PageNumberPagination):
+    """Pagination for admin item list — 20 items per page."""
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+class AdminItemListView(generics.ListAPIView):
+    """
+    GET /api/admin/items/ — List all items (paginated, filterable, searchable).
+
+    Admin-only. Returns all items including soft-deleted ones.
+    Supports filtering by status via ?status= query param.
+    Supports search by title via ?search= query param.
+    """
+    queryset = Item.objects.all().order_by('-created_at')
+    serializer_class = ItemListSerializer
+    permission_classes = [IsAdminUser]
+    pagination_class = AdminItemPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = ['status']
+    search_fields = ['title']
+
+
+class AdminItemDeleteView(generics.DestroyAPIView):
+    """
+    DELETE /api/admin/items/{id}/ — Soft-delete an item.
+
+    Admin-only. Sets is_deleted=True, deleted_at=now, deleted_by=admin.
+    """
+    queryset = Item.objects.all()
+    permission_classes = [IsAdminUser]
+
+    def perform_destroy(self, instance):
+        """Soft-delete: mark as deleted instead of hard-deleting."""
+        instance.is_deleted = True
+        instance.deleted_at = timezone.now()
+        instance.deleted_by = self.request.user
+        instance.save(update_fields=['is_deleted', 'deleted_at', 'deleted_by'])
 
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):

@@ -1,13 +1,16 @@
 """
 API views for the users app.
 
-Handles user registration, profile management, and settings.
+Handles user registration, profile management, settings,
+and admin-only user management endpoints.
 """
 
 from django.contrib.auth import get_user_model
-from rest_framework import status, viewsets
+from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.filters import SearchFilter
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
 from .models import UserProfile, UserSettings
@@ -20,6 +23,47 @@ from .serializers import (
 )
 
 User = get_user_model()
+
+
+# ──────────────────────────────────────────────
+# Admin Views (is_staff only)
+# ──────────────────────────────────────────────
+
+class AdminUserPagination(PageNumberPagination):
+    """Pagination for admin user list — 20 users per page."""
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+class AdminUserListView(generics.ListAPIView):
+    """
+    GET /api/admin/users/ — List all users (paginated, searchable).
+
+    Admin-only. Returns all users including inactive ones.
+    Supports search by email or name via ?search= query param.
+    """
+    queryset = User.objects.all().order_by('-date_joined')
+    serializer_class = UserListSerializer
+    permission_classes = [IsAdminUser]
+    pagination_class = AdminUserPagination
+    filter_backends = [SearchFilter]
+    search_fields = ['email', 'name']
+
+
+class AdminUserDeleteView(generics.DestroyAPIView):
+    """
+    DELETE /api/admin/users/{id}/ — Soft-delete a user.
+
+    Admin-only. Sets is_active=False instead of hard-deleting.
+    """
+    queryset = User.objects.all()
+    permission_classes = [IsAdminUser]
+
+    def perform_destroy(self, instance):
+        """Soft-delete: set is_active=False instead of deleting."""
+        instance.is_active = False
+        instance.save(update_fields=['is_active'])
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):

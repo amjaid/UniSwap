@@ -146,6 +146,7 @@ class UserListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'email', 'name', 'avatar_url',
             'university_domain', 'rating_avg',
+            'is_staff', 'is_active',
         ]
 
 
@@ -169,12 +170,12 @@ class UserDetailSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'email', 'name', 'avatar', 'avatar_url',
-            'bio', 'university_domain', 'is_active',
+            'bio', 'university_domain', 'is_active', 'is_staff',
             'date_joined', 'profile', 'settings',
         ]
         read_only_fields = [
             'id', 'email', 'university_domain',
-            'is_active', 'date_joined',
+            'is_active', 'is_staff', 'date_joined',
         ]
 
     def update(self, instance, validated_data):
