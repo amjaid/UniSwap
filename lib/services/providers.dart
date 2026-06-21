@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uniswap/repositories/listing_repository.dart';
 import 'package:uniswap/repositories/swap_repository.dart';
+import 'package:uniswap/services/admin_service.dart';
 import 'package:uniswap/services/api_client.dart';
 import 'package:uniswap/services/chat_service.dart';
 import 'package:uniswap/services/django_auth_service.dart';
@@ -42,6 +43,11 @@ final notificationServiceProvider = Provider<DjangoNotificationService>((ref) {
 /// Storage service (for file uploads).
 final storageServiceProvider = Provider<DjangoStorageService>((ref) {
   return DjangoStorageService(ref.read(apiClientProvider));
+});
+
+/// Admin service (is_staff only endpoints).
+final adminServiceProvider = Provider<AdminService>((ref) {
+  return AdminService(ref.read(apiClientProvider));
 });
 
 /// Listing repository (in-memory cache).

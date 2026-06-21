@@ -110,6 +110,28 @@ class Item(models.Model):
     created_at = models.DateTimeField(_('created at'), auto_now_add=True)
     updated_at = models.DateTimeField(_('updated at'), auto_now=True)
 
+    # Soft-delete fields for admin moderation
+    is_deleted = models.BooleanField(
+        _('is deleted'),
+        default=False,
+        help_text=_('Soft-delete flag for admin moderation'),
+    )
+    deleted_at = models.DateTimeField(
+        _('deleted at'),
+        null=True,
+        blank=True,
+        help_text=_('When this item was soft-deleted'),
+    )
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='deleted_items',
+        verbose_name=_('deleted by'),
+        help_text=_('Admin who soft-deleted this item'),
+    )
+
     class Meta:
         verbose_name = _('item')
         verbose_name_plural = _('items')
@@ -121,6 +143,7 @@ class Item(models.Model):
             models.Index(fields=['seller']),
             models.Index(fields=['-created_at']),
             models.Index(fields=['price']),
+            models.Index(fields=['is_deleted']),
         ]
 
     def __str__(self):

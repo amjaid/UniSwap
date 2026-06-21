@@ -45,6 +45,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final user = ref.watch(authStateProvider);
     final userId = user?['id']?.toString();
 
+    // Debug: log user data to verify is_staff is present
+    debugPrint('[ProfileScreen] user data: ${user?.toString()}');
+    debugPrint('[ProfileScreen] is_staff check: ${user?['is_staff']} (type: ${user?['is_staff'].runtimeType})');
+
     // Fetch user's listings once
     if (!_listingsLoaded) {
       _listingsLoaded = true;
@@ -213,6 +217,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             label: 'Report an issue',
             onTap: () => context.go('/report/app/support'),
           ),
+          // Admin Panel button — only visible to staff users
+          if (user?['is_staff'] == true)
+            _ActionTile(
+              icon: Icons.admin_panel_settings,
+              label: 'Admin Panel',
+              onTap: () => context.go('/admin'),
+            ),
           const SizedBox(height: 12),
           OutlinedButton(
             onPressed: () async {

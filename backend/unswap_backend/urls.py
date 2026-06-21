@@ -15,7 +15,7 @@ from rest_framework_simplejwt.views import (
     TokenVerifyView,
 )
 
-from .views import AdminStatsView
+from .views import AdminDashboardStatsView, AdminStatsView
 
 # API URL prefix
 API_PREFIX = 'api/'
@@ -41,12 +41,21 @@ urlpatterns = [
         name='token_verify',
     ),
 
-    # Admin statistics dashboard (US-401)
+    # Admin statistics dashboard (US-401) — legacy endpoint
     path(
         f'{API_PREFIX}admin/stats/',
         AdminStatsView.as_view(),
         name='admin-stats',
     ),
+
+    # Admin management endpoints (is_staff only)
+    path(
+        f'{API_PREFIX}admin/stats/dashboard/',
+        AdminDashboardStatsView.as_view(),
+        name='admin-dashboard-stats',
+    ),
+    path(f'{API_PREFIX}admin/users/', include('users.admin_urls')),
+    path(f'{API_PREFIX}admin/items/', include('items.admin_urls')),
 
     # App-specific API endpoints
     path(f'{API_PREFIX}', include('users.urls')),
